@@ -1,0 +1,762 @@
+# <!-- filename: /automations/finance_command_center/cashflow_update.yaml -->
+# ============================================================================
+# CASHFLOW UPDATE AUTOMATION
+# Daily cash position and short-term forecast updates
+# Platform: n8n
+# ============================================================================
+
+name: cashflow_update
+description: |
+  Daily cashflow management workflow that:
+  - Syncs current bank balances
+  - Updates cash position records
+  - Generates rolling 13-week cash forecast
+  - Identifies cash gaps and alerts owner
+
+# ============================================================================
+# METADATA
+# ============================================================================
+metadata:
+  version: "1.0.0"
+  module: finance_command_center
+  owner: spec-os
+  dependencies:
+    - quickbooks_online
+    - plaid_banking  # optional for real-time bank feeds
+    - supabase
+    - slack_notifications
+
+# ============================================================================
+# TRIGGERS
+# ============================================================================
+triggers:
+  # Primary: Daily morning update
+  - id: daily_morning_trigger
+    type: schedule
+    config:
+      cron: "0 6 * * *"  # 6 AM daily
+      timezone: "America/Chicago"
+    description: "Daily cash position refresh"
+
+  # Secondary: After bank feed sync
+  - id: bank_sync_trigger
+    type: webhook
+    config:
+      path: "/webhook/bank-sync-complete"
+      method: POST
+    description: "Triggered after Plaid/bank feed updates"
+
+  # On-demand: Manual refresh
+  - id: manual_trigger
+    type: webhook
+    config:
+      path: "/webhook/cashflow-refresh"
+      method: POST
+    description: "Manual cash position refresh"
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+config:
+  forecast_settings:
+    # Forecast horizon
+    weeks_forward: 13
+    
+    # Confidence bands
+    confidence_levels:
+      - level: high
+        percentile: 90
+        adjustment_factor: 0.85  # Conservative
+      - level: medium
+        percentile: 50
+        adjustment_factor: 1.0   # Expected
+      - level: low
+        percentile: 10
+        adjustment_factor: 1.15  # Optimistic
+    
+    # Seasonality adjustments (roofing specific)
+    seasonal_factors:
+      january: 0.60    # Winter slowdown
+      february: 0.65
+      march: 0.80      # Spring ramp-up
+      april: 1.00
+      may: 1.10        # Peak season starts
+      june: 1.20
+      july: 1.15
+      august: 1.10
+      september: 1.15  # Storm season
+      october: 1.05
+      november: 0.85   # Wind down
+      december: 0.70   # Holiday slowdown
+
+  alert_thresholds:
+    # Cash runway alerts
+    critical_runway_weeks: 2
+    warning_runway_weeks: 4
+    
+    # Balance thresholds
+    min_operating_balance: 25000
+    target_operating_balance: 50000
+    
+    # Week-over-week change alerts
+    significant_decline_percent: 15
+
+  ar_assumptions:
+    # Collection timing (days)
+    residential_avg_days: 14
+    commercial_avg_days: 45
+    insurance_avg_days: 30
+    
+    # Collection probability by age
+    current_collection_rate: 0.95
+    days_31_60_collection_rate: 0.85
+    days_61_90_collection_rate: 0.70
+    over_90_collection_rate: 0.50
+
+  ap_assumptions:
+    # Payment timing
+    material_payment_days: 30
+    subcontractor_payment_days: 14
+    overhead_payment_days: 30
+
+# ============================================================================
+# WORKFLOW: DAILY CASH UPDATE
+# ============================================================================
+workflow_daily_cash:
+  name: daily_cash_position_update
+  
+  nodes:
+    # Step 1: Get active tenants
+    - id: get_tenants
+      type: supabase_query
+      config:
+        query: |
+          SELECT 
+            t.id, 
+            t.name, 
+            t.qbo_realm_id,
+            t.cash_accounts,
+            t.forecast_settings
+          FROM tenants t
+          WHERE t.status = 'active'
+            AND t.finance_module_enabled = true
+      outputs:
+        - tenants
+
+    # Step 2: Process each tenant
+    - id: tenant_loop
+      type: loop
+      config:
+        items: "{{ nodes.get_tenants.outputs.tenants }}"
+        variable: tenant
+      children:
+        
+        # Step 2a: Fetch bank account balances from QBO
+        - id: fetch_bank_accounts
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Account
+            query: |
+              SELECT * FROM Account 
+              WHERE AccountType = 'Bank' 
+                AND Active = true
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - bank_accounts
+
+        # Step 2b: Calculate current cash position
+        - id: calculate_cash_position
+          type: code
+          config:
+            language: javascript
+            code: |
+              const bankAccounts = $input.bank_accounts;
+              const today = new Date().toISOString().split('T')[0];
+              
+              // Sum all bank account balances
+              let totalCash = 0;
+              const accountDetails = [];
+              
+              bankAccounts.forEach(account => {
+                const balance = parseFloat(account.CurrentBalance || 0);
+                totalCash += balance;
+                accountDetails.push({
+                  account_id: account.Id,
+                  name: account.Name,
+                  balance: balance,
+                  account_type: account.AccountSubType || 'Checking'
+                });
+              });
+              
+              return {
+                total_cash: totalCash,
+                as_of_date: today,
+                account_breakdown: accountDetails
+              };
+          inputs:
+            bank_accounts: "{{ nodes.fetch_bank_accounts.outputs.bank_accounts }}"
+          outputs:
+            - total_cash
+            - as_of_date
+            - account_breakdown
+
+        # Step 2c: Fetch open AR for inflow projections
+        - id: fetch_open_ar
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Invoice
+            query: |
+              SELECT * FROM Invoice 
+              WHERE Balance > '0'
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - open_invoices
+
+        # Step 2d: Fetch open AP for outflow projections
+        - id: fetch_open_ap
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Bill
+            query: |
+              SELECT * FROM Bill 
+              WHERE Balance > '0'
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - open_bills
+
+        # Step 2e: Get recurring expenses from history
+        - id: get_recurring_patterns
+          type: supabase_query
+          config:
+            query: |
+              SELECT 
+                category,
+                avg_weekly_amount,
+                payment_day_of_month,
+                is_payroll,
+                vendor_name
+              FROM recurring_expenses
+              WHERE tenant_id = '{{ tenant.id }}'
+                AND is_active = true
+          outputs:
+            - recurring_expenses
+
+        # Step 2f: Get active jobs for revenue projection
+        - id: get_active_jobs
+          type: supabase_query
+          config:
+            query: |
+              SELECT 
+                j.id,
+                j.job_number,
+                j.customer_type,
+                j.contract_amount,
+                j.amount_invoiced,
+                j.amount_collected,
+                j.estimated_completion_date,
+                j.payment_terms
+              FROM jobs j
+              WHERE j.tenant_id = '{{ tenant.id }}'
+                AND j.status IN ('in_progress', 'pending_invoice')
+          outputs:
+            - active_jobs
+
+        # Step 2g: Build 13-week cash forecast
+        - id: build_forecast
+          type: code
+          config:
+            language: javascript
+            code: |
+              const totalCash = $input.total_cash;
+              const openInvoices = $input.open_invoices;
+              const openBills = $input.open_bills;
+              const recurringExpenses = $input.recurring_expenses;
+              const activeJobs = $input.active_jobs;
+              const arAssumptions = $input.ar_assumptions;
+              const seasonalFactors = $input.seasonal_factors;
+              const weeksForward = 13;
+              
+              const today = new Date();
+              const forecast = [];
+              
+              // Helper: Get week start date
+              const getWeekStart = (weeksFromNow) => {
+                const date = new Date(today);
+                date.setDate(date.getDate() + (weeksFromNow * 7));
+                return date;
+              };
+              
+              // Helper: Get seasonal factor for a date
+              const getSeasonalFactor = (date) => {
+                const months = ['january', 'february', 'march', 'april', 'may', 'june',
+                               'july', 'august', 'september', 'october', 'november', 'december'];
+                return seasonalFactors[months[date.getMonth()]] || 1.0;
+              };
+              
+              // Project AR collections by week
+              const projectARCollections = () => {
+                const weeklyCollections = Array(weeksForward).fill(0);
+                
+                openInvoices.forEach(inv => {
+                  const dueDate = new Date(inv.DueDate);
+                  const balance = parseFloat(inv.Balance);
+                  const daysSinceDue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                  
+                  // Determine collection probability
+                  let collectionRate = arAssumptions.current_collection_rate;
+                  if (daysSinceDue > 90) collectionRate = arAssumptions.over_90_collection_rate;
+                  else if (daysSinceDue > 60) collectionRate = arAssumptions.days_61_90_collection_rate;
+                  else if (daysSinceDue > 30) collectionRate = arAssumptions.days_31_60_collection_rate;
+                  
+                  // Estimate collection week based on customer type
+                  let avgCollectionDays = arAssumptions.residential_avg_days;
+                  // Could check customer type here if available
+                  
+                  const expectedCollectionDate = new Date(dueDate);
+                  expectedCollectionDate.setDate(expectedCollectionDate.getDate() + avgCollectionDays);
+                  
+                  const weeksUntilCollection = Math.max(0, Math.floor(
+                    (expectedCollectionDate - today) / (1000 * 60 * 60 * 24 * 7)
+                  ));
+                  
+                  if (weeksUntilCollection < weeksForward) {
+                    weeklyCollections[weeksUntilCollection] += balance * collectionRate;
+                  }
+                });
+                
+                return weeklyCollections;
+              };
+              
+              // Project AP payments by week
+              const projectAPPayments = () => {
+                const weeklyPayments = Array(weeksForward).fill(0);
+                
+                openBills.forEach(bill => {
+                  const dueDate = new Date(bill.DueDate);
+                  const balance = parseFloat(bill.Balance);
+                  
+                  const weeksUntilDue = Math.floor(
+                    (dueDate - today) / (1000 * 60 * 60 * 24 * 7)
+                  );
+                  
+                  // Pay on due date or immediately if overdue
+                  const paymentWeek = Math.max(0, Math.min(weeksUntilDue, weeksForward - 1));
+                  weeklyPayments[paymentWeek] += balance;
+                });
+                
+                return weeklyPayments;
+              };
+              
+              // Project recurring expenses by week
+              const projectRecurring = () => {
+                const weeklyRecurring = Array(weeksForward).fill(0);
+                
+                recurringExpenses.forEach(exp => {
+                  const weeklyAmount = parseFloat(exp.avg_weekly_amount || 0);
+                  
+                  for (let week = 0; week < weeksForward; week++) {
+                    // Payroll typically every 2 weeks
+                    if (exp.is_payroll && week % 2 !== 0) continue;
+                    
+                    weeklyRecurring[week] += weeklyAmount;
+                  }
+                });
+                
+                return weeklyRecurring;
+              };
+              
+              // Project new revenue from active jobs
+              const projectJobRevenue = () => {
+                const weeklyRevenue = Array(weeksForward).fill(0);
+                
+                activeJobs.forEach(job => {
+                  const remaining = parseFloat(job.contract_amount) - parseFloat(job.amount_invoiced || 0);
+                  if (remaining <= 0) return;
+                  
+                  const completionDate = new Date(job.estimated_completion_date);
+                  const weeksToCompletion = Math.floor(
+                    (completionDate - today) / (1000 * 60 * 60 * 24 * 7)
+                  );
+                  
+                  // Assume billing at completion + collection time
+                  const collectionDays = job.customer_type === 'commercial' 
+                    ? arAssumptions.commercial_avg_days 
+                    : arAssumptions.residential_avg_days;
+                  
+                  const collectionWeek = weeksToCompletion + Math.ceil(collectionDays / 7);
+                  
+                  if (collectionWeek >= 0 && collectionWeek < weeksForward) {
+                    weeklyRevenue[collectionWeek] += remaining * 0.85; // 85% collection rate
+                  }
+                });
+                
+                return weeklyRevenue;
+              };
+              
+              // Build forecast
+              const arCollections = projectARCollections();
+              const apPayments = projectAPPayments();
+              const recurring = projectRecurring();
+              const jobRevenue = projectJobRevenue();
+              
+              let runningBalance = totalCash;
+              
+              for (let week = 0; week < weeksForward; week++) {
+                const weekStart = getWeekStart(week);
+                const seasonalFactor = getSeasonalFactor(weekStart);
+                
+                // Apply seasonal adjustment to new revenue
+                const inflows = arCollections[week] + (jobRevenue[week] * seasonalFactor);
+                const outflows = apPayments[week] + recurring[week];
+                const netChange = inflows - outflows;
+                
+                runningBalance += netChange;
+                
+                forecast.push({
+                  week_number: week + 1,
+                  week_start: weekStart.toISOString().split('T')[0],
+                  beginning_balance: runningBalance - netChange,
+                  inflows: {
+                    ar_collections: arCollections[week],
+                    job_revenue: jobRevenue[week] * seasonalFactor,
+                    total: inflows
+                  },
+                  outflows: {
+                    ap_payments: apPayments[week],
+                    recurring_expenses: recurring[week],
+                    total: outflows
+                  },
+                  net_change: netChange,
+                  ending_balance: runningBalance,
+                  seasonal_factor: seasonalFactor
+                });
+              }
+              
+              // Calculate summary metrics
+              const minBalance = Math.min(...forecast.map(f => f.ending_balance));
+              const minBalanceWeek = forecast.findIndex(f => f.ending_balance === minBalance) + 1;
+              const avgBalance = forecast.reduce((sum, f) => sum + f.ending_balance, 0) / weeksForward;
+              
+              return {
+                forecast: forecast,
+                summary: {
+                  current_balance: totalCash,
+                  min_projected_balance: minBalance,
+                  min_balance_week: minBalanceWeek,
+                  average_balance: avgBalance,
+                  total_ar_to_collect: arCollections.reduce((a, b) => a + b, 0),
+                  total_ap_to_pay: apPayments.reduce((a, b) => a + b, 0),
+                  total_recurring: recurring.reduce((a, b) => a + b, 0),
+                  cash_runway_weeks: forecast.filter(f => f.ending_balance > 0).length
+                }
+              };
+          inputs:
+            total_cash: "{{ nodes.calculate_cash_position.outputs.total_cash }}"
+            open_invoices: "{{ nodes.fetch_open_ar.outputs.open_invoices }}"
+            open_bills: "{{ nodes.fetch_open_ap.outputs.open_bills }}"
+            recurring_expenses: "{{ nodes.get_recurring_patterns.outputs.recurring_expenses }}"
+            active_jobs: "{{ nodes.get_active_jobs.outputs.active_jobs }}"
+            ar_assumptions: "{{ config.ar_assumptions }}"
+            seasonal_factors: "{{ config.forecast_settings.seasonal_factors }}"
+          outputs:
+            - forecast
+            - summary
+
+        # Step 2h: Store cash position
+        - id: store_cash_position
+          type: supabase_upsert
+          config:
+            table: cash_positions
+            data:
+              tenant_id: "{{ tenant.id }}"
+              as_of_date: "{{ nodes.calculate_cash_position.outputs.as_of_date }}"
+              cash_balance: "{{ nodes.calculate_cash_position.outputs.total_cash }}"
+              account_breakdown: "{{ nodes.calculate_cash_position.outputs.account_breakdown | json }}"
+              forecast_summary: "{{ nodes.build_forecast.outputs.summary | json }}"
+              updated_at: "{{ NOW() }}"
+            conflict_columns:
+              - tenant_id
+              - as_of_date
+
+        # Step 2i: Store weekly forecast
+        - id: store_forecast
+          type: supabase_upsert
+          config:
+            table: cash_forecasts
+            data:
+              tenant_id: "{{ tenant.id }}"
+              forecast_date: "{{ nodes.calculate_cash_position.outputs.as_of_date }}"
+              weeks_forward: 13
+              forecast_data: "{{ nodes.build_forecast.outputs.forecast | json }}"
+              summary: "{{ nodes.build_forecast.outputs.summary | json }}"
+              created_at: "{{ NOW() }}"
+            conflict_columns:
+              - tenant_id
+              - forecast_date
+
+        # Step 2j: Evaluate alerts
+        - id: evaluate_alerts
+          type: code
+          config:
+            language: javascript
+            code: |
+              const summary = $input.summary;
+              const thresholds = $input.thresholds;
+              const forecast = $input.forecast;
+              const tenantName = $input.tenant_name;
+              
+              const alerts = [];
+              
+              // Critical runway alert
+              if (summary.cash_runway_weeks <= thresholds.critical_runway_weeks) {
+                alerts.push({
+                  type: 'critical',
+                  category: 'cash_runway',
+                  message: `CRITICAL: ${tenantName} has only ${summary.cash_runway_weeks} weeks of cash runway`,
+                  action: 'Immediate action required - review collections and defer non-essential payments'
+                });
+              } else if (summary.cash_runway_weeks <= thresholds.warning_runway_weeks) {
+                alerts.push({
+                  type: 'warning',
+                  category: 'cash_runway',
+                  message: `WARNING: ${tenantName} has ${summary.cash_runway_weeks} weeks of cash runway`,
+                  action: 'Review AR collections and upcoming large payments'
+                });
+              }
+              
+              // Minimum balance alert
+              if (summary.min_projected_balance < thresholds.min_operating_balance) {
+                alerts.push({
+                  type: 'warning',
+                  category: 'min_balance',
+                  message: `Cash projected to drop below $${thresholds.min_operating_balance.toLocaleString()} in Week ${summary.min_balance_week}`,
+                  projected_low: summary.min_projected_balance,
+                  action: 'Accelerate collections or arrange credit line'
+                });
+              }
+              
+              // Negative balance projection
+              if (summary.min_projected_balance < 0) {
+                alerts.push({
+                  type: 'critical',
+                  category: 'negative_balance',
+                  message: `CRITICAL: Negative cash balance projected in Week ${summary.min_balance_week}`,
+                  projected_low: summary.min_projected_balance,
+                  action: 'Immediate intervention required'
+                });
+              }
+              
+              return { alerts };
+          inputs:
+            summary: "{{ nodes.build_forecast.outputs.summary }}"
+            forecast: "{{ nodes.build_forecast.outputs.forecast }}"
+            thresholds: "{{ config.alert_thresholds }}"
+            tenant_name: "{{ tenant.name }}"
+          outputs:
+            - alerts
+
+        # Step 2k: Send alerts if any
+        - id: send_alerts
+          type: conditional
+          config:
+            condition: "{{ nodes.evaluate_alerts.outputs.alerts.length > 0 }}"
+            if_true:
+              - id: format_alert_message
+                type: slack_message
+                config:
+                  channel: "{{ tenant.owner_slack_channel }}"
+                  message: |
+                    🚨 *Cash Flow Alerts - {{ tenant.name }}*
+                    
+                    {% for alert in nodes.evaluate_alerts.outputs.alerts %}
+                    {{ '🔴' if alert.type == 'critical' else '🟡' }} *{{ alert.category | upper }}*
+                    {{ alert.message }}
+                    {% if alert.projected_low %}
+                    _Projected low: ${{ alert.projected_low | number_format(2) }}_
+                    {% endif %}
+                    _Action: {{ alert.action }}_
+                    
+                    {% endfor %}
+
+        # Step 2l: Daily cash summary to owner
+        - id: send_daily_summary
+          type: slack_message
+          config:
+            channel: "{{ tenant.owner_slack_channel }}"
+            message: |
+              💰 *Daily Cash Update - {{ tenant.name }}*
+              _{{ nodes.calculate_cash_position.outputs.as_of_date }}_
+              
+              *Current Cash:* ${{ nodes.calculate_cash_position.outputs.total_cash | number_format(2) }}
+              
+              *13-Week Outlook:*
+              • Min projected: ${{ nodes.build_forecast.outputs.summary.min_projected_balance | number_format(2) }} (Week {{ nodes.build_forecast.outputs.summary.min_balance_week }})
+              • Avg projected: ${{ nodes.build_forecast.outputs.summary.average_balance | number_format(2) }}
+              • Cash runway: {{ nodes.build_forecast.outputs.summary.cash_runway_weeks }} weeks
+              
+              *Expected Flows:*
+              • AR to collect: ${{ nodes.build_forecast.outputs.summary.total_ar_to_collect | number_format(2) }}
+              • AP to pay: ${{ nodes.build_forecast.outputs.summary.total_ap_to_pay | number_format(2) }}
+              • Recurring expenses: ${{ nodes.build_forecast.outputs.summary.total_recurring | number_format(2) }}
+
+# ============================================================================
+# DATABASE SCHEMA
+# ============================================================================
+schema:
+  cash_positions:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        default: gen_random_uuid()
+      - name: tenant_id
+        type: uuid
+        references: tenants(id)
+        not_null: true
+      - name: as_of_date
+        type: date
+        not_null: true
+      - name: cash_balance
+        type: decimal(15,2)
+        not_null: true
+      - name: account_breakdown
+        type: jsonb
+      - name: forecast_summary
+        type: jsonb
+      - name: created_at
+        type: timestamptz
+        default: now()
+      - name: updated_at
+        type: timestamptz
+        default: now()
+    indexes:
+      - columns: [tenant_id, as_of_date]
+        unique: true
+      - columns: [tenant_id, created_at]
+    rls:
+      enabled: true
+      policy: "tenant_id = current_tenant_id()"
+
+  cash_forecasts:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        default: gen_random_uuid()
+      - name: tenant_id
+        type: uuid
+        references: tenants(id)
+        not_null: true
+      - name: forecast_date
+        type: date
+        not_null: true
+      - name: weeks_forward
+        type: integer
+        not_null: true
+      - name: forecast_data
+        type: jsonb
+        not_null: true
+      - name: summary
+        type: jsonb
+      - name: confidence_level
+        type: text
+        default: "'medium'"
+      - name: created_at
+        type: timestamptz
+        default: now()
+    indexes:
+      - columns: [tenant_id, forecast_date]
+        unique: true
+    rls:
+      enabled: true
+      policy: "tenant_id = current_tenant_id()"
+
+  recurring_expenses:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        default: gen_random_uuid()
+      - name: tenant_id
+        type: uuid
+        references: tenants(id)
+        not_null: true
+      - name: category
+        type: text
+        not_null: true
+      - name: vendor_name
+        type: text
+      - name: avg_weekly_amount
+        type: decimal(12,2)
+      - name: payment_day_of_month
+        type: integer
+      - name: is_payroll
+        type: boolean
+        default: false
+      - name: is_active
+        type: boolean
+        default: true
+      - name: created_at
+        type: timestamptz
+        default: now()
+    indexes:
+      - columns: [tenant_id, is_active]
+    rls:
+      enabled: true
+      policy: "tenant_id = current_tenant_id()"
+
+# ============================================================================
+# ERROR HANDLING
+# ============================================================================
+error_handling:
+  retry_policy:
+    max_attempts: 3
+    backoff_multiplier: 2
+    initial_delay_seconds: 30
+
+  on_error:
+    - type: log_error
+      config:
+        table: workflow_errors
+        include_context: true
+    
+    - type: alert
+      config:
+        channel: slack
+        message: "Cashflow update error: {{ error.message }}"
+        severity: warning
+
+# ============================================================================
+# MONITORING
+# ============================================================================
+monitoring:
+  metrics:
+    - name: cashflow_update_duration
+      type: histogram
+      labels: [tenant_id]
+    
+    - name: cash_position_current
+      type: gauge
+      labels: [tenant_id]
+    
+    - name: cash_runway_weeks
+      type: gauge
+      labels: [tenant_id]
+    
+    - name: forecast_accuracy
+      type: gauge
+      labels: [tenant_id, weeks_out]
+      description: "Compares past forecasts to actuals"
+
+  alerts:
+    - name: cashflow_update_failed
+      condition: "workflow_error"
+      severity: warning
+    
+    - name: stale_cash_position
+      condition: "hours_since_update > 36"
+      severity: warning
+      message: "Cash position not updated in 36+ hours for {{ tenant_name }}"

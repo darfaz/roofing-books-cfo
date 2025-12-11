@@ -1,0 +1,50 @@
+# Roofing CFO MVP - Python Dependencies
+# Install: pip install -r requirements.txt
+
+# QuickBooks Integration
+python-quickbooks>=0.9.0
+
+# Double-Entry Accounting
+python-accounting>=1.0.0
+
+# LLM / AI
+langchain>=0.1.0
+langchain-anthropic>=0.1.0
+langchain-openai>=0.0.5
+
+# Dashboard
+streamlit>=1.30.0
+plotly>=5.18.0
+
+# Database
+supabase>=2.0.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# API Framework
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+pydantic>=2.5.0
+
+# Utilities
+python-dotenv>=1.0.0
+python-dateutil>=2.8.0
+
+# OCR (InvoiceNet dependencies)
+tensorflow>=2.15.0
+opencv-python>=4.9.0
+Pillow>=10.0.0
+
+# Tax (Avalara)
+# Note: Install via `pip install Avalara` separately
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+
+# Development
+black>=24.0.0
+ruff>=0.1.0

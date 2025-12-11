@@ -1,0 +1,843 @@
+# <!-- filename: /automations/finance_command_center/forecast_rebuild.yaml -->
+# ============================================================================
+# FORECAST REBUILD AUTOMATION
+# Weekly comprehensive forecast rebuild with scenario modeling
+# Platform: n8n
+# ============================================================================
+
+name: forecast_rebuild
+description: |
+  Weekly comprehensive forecast rebuild that:
+  - Recalculates baseline forecasts with latest data
+  - Runs multiple scenario models (optimistic, baseline, pessimistic)
+  - Incorporates backlog and pipeline data
+  - Generates confidence intervals and risk assessments
+  - Updates forecast accuracy tracking
+
+# ============================================================================
+# METADATA
+# ============================================================================
+metadata:
+  version: "1.0.0"
+  module: finance_command_center
+  owner: spec-os
+  dependencies:
+    - quickbooks_online
+    - jobber_or_servicetitan
+    - supabase
+    - llm_agent
+
+# ============================================================================
+# TRIGGERS
+# ============================================================================
+triggers:
+  # Primary: Weekly rebuild
+  - id: weekly_rebuild_trigger
+    type: schedule
+    config:
+      cron: "0 5 * * 0"  # 5 AM Sunday
+      timezone: "America/Chicago"
+    description: "Weekly full forecast rebuild"
+
+  # Secondary: After month-end close
+  - id: month_close_trigger
+    type: webhook
+    config:
+      path: "/webhook/month-close-complete"
+      method: POST
+    description: "Rebuild after month-end close with final actuals"
+
+  # On-demand: Manual rebuild
+  - id: manual_trigger
+    type: webhook
+    config:
+      path: "/webhook/forecast-rebuild"
+      method: POST
+      body_schema:
+        tenant_id: string
+        rebuild_type: "full | quick | scenario_only"
+    description: "Manual forecast rebuild"
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+config:
+  forecast_horizons:
+    short_term:
+      weeks: 13
+      granularity: weekly
+      confidence_target: 0.85
+    
+    medium_term:
+      months: 6
+      granularity: monthly
+      confidence_target: 0.70
+    
+    long_term:
+      months: 12
+      granularity: monthly
+      confidence_target: 0.50
+
+  scenarios:
+    pessimistic:
+      name: "Pessimistic"
+      description: "Conservative scenario - slower collections, reduced bookings"
+      adjustments:
+        revenue_factor: 0.80
+        ar_collection_rate: 0.75
+        new_bookings_factor: 0.70
+        seasonal_impact: 1.2  # Amplify seasonal dips
+        expense_factor: 1.05
+    
+    baseline:
+      name: "Baseline"
+      description: "Expected scenario based on historical patterns"
+      adjustments:
+        revenue_factor: 1.0
+        ar_collection_rate: 0.90
+        new_bookings_factor: 1.0
+        seasonal_impact: 1.0
+        expense_factor: 1.0
+    
+    optimistic:
+      name: "Optimistic"
+      description: "Best case - strong collections, full bookings"
+      adjustments:
+        revenue_factor: 1.15
+        ar_collection_rate: 0.95
+        new_bookings_factor: 1.2
+        seasonal_impact: 0.8  # Reduced seasonal impact
+        expense_factor: 0.95
+
+  historical_analysis:
+    # Periods to analyze for patterns
+    lookback_months: 24
+    
+    # Minimum data points for confidence
+    min_data_points: 12
+    
+    # Trend detection sensitivity
+    trend_threshold: 0.05  # 5% change considered significant
+
+  roofing_specific:
+    # Weather impact factors by region
+    weather_sensitivity: high
+    
+    # Storm season boost (typically August-October)
+    storm_season_months: [8, 9, 10]
+    storm_boost_factor: 1.25
+    
+    # Insurance work timing (longer collection cycles)
+    insurance_work_ar_days: 45
+    
+    # Material cost volatility
+    material_cost_volatility: 0.10  # 10% annual variance
+
+# ============================================================================
+# WORKFLOW: FULL FORECAST REBUILD
+# ============================================================================
+workflow_rebuild:
+  name: full_forecast_rebuild
+  
+  nodes:
+    # Step 1: Get tenants for rebuild
+    - id: get_tenants
+      type: supabase_query
+      config:
+        query: |
+          SELECT 
+            t.*,
+            cf.forecast_date as last_forecast,
+            cf.summary as last_summary
+          FROM tenants t
+          LEFT JOIN cash_forecasts cf ON t.id = cf.tenant_id
+            AND cf.forecast_date = (
+              SELECT MAX(forecast_date) 
+              FROM cash_forecasts 
+              WHERE tenant_id = t.id
+            )
+          WHERE t.status = 'active'
+            AND t.finance_module_enabled = true
+      outputs:
+        - tenants
+
+    # Step 2: Process each tenant
+    - id: tenant_loop
+      type: loop
+      config:
+        items: "{{ nodes.get_tenants.outputs.tenants }}"
+        variable: tenant
+      children:
+        
+        # Step 2a: Gather historical data
+        - id: get_historical_revenue
+          type: supabase_query
+          config:
+            query: |
+              SELECT 
+                DATE_TRUNC('month', revenue_date) as month,
+                SUM(amount) as total_revenue,
+                COUNT(DISTINCT job_id) as job_count,
+                AVG(amount) as avg_job_revenue
+              FROM job_revenue
+              WHERE tenant_id = '{{ tenant.id }}'
+                AND revenue_date >= NOW() - INTERVAL '24 months'
+              GROUP BY DATE_TRUNC('month', revenue_date)
+              ORDER BY month
+          outputs:
+            - historical_revenue
+
+        # Step 2b: Get historical expenses
+        - id: get_historical_expenses
+          type: supabase_query
+          config:
+            query: |
+              SELECT 
+                DATE_TRUNC('month', transaction_date) as month,
+                category,
+                SUM(amount) as total_amount
+              FROM transactions_categorized
+              WHERE tenant_id = '{{ tenant.id }}'
+                AND transaction_type = 'expense'
+                AND transaction_date >= NOW() - INTERVAL '24 months'
+              GROUP BY DATE_TRUNC('month', transaction_date), category
+              ORDER BY month, category
+          outputs:
+            - historical_expenses
+
+        # Step 2c: Get current pipeline/backlog from Jobber
+        - id: get_pipeline
+          type: jobber_api
+          config:
+            operation: list_jobs
+            filters:
+              status: ["estimate", "scheduled", "in_progress"]
+            realm_id: "{{ tenant.jobber_id }}"
+          outputs:
+            - pipeline_jobs
+
+        # Step 2d: Get current AR/AP
+        - id: get_current_ar
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Invoice
+            query: "SELECT * FROM Invoice WHERE Balance > '0'"
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - open_ar
+
+        - id: get_current_ap
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Bill
+            query: "SELECT * FROM Bill WHERE Balance > '0'"
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - open_ap
+
+        # Step 2e: Calculate historical patterns
+        - id: analyze_patterns
+          type: code
+          config:
+            language: javascript
+            code: |
+              const historicalRevenue = $input.historical_revenue;
+              const historicalExpenses = $input.historical_expenses;
+              
+              // Calculate monthly averages
+              const monthlyAvgs = {};
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+              
+              // Initialize
+              monthNames.forEach((m, i) => {
+                monthlyAvgs[i + 1] = { revenue: [], expenses: [] };
+              });
+              
+              // Populate revenue by month
+              historicalRevenue.forEach(row => {
+                const month = new Date(row.month).getMonth() + 1;
+                monthlyAvgs[month].revenue.push(parseFloat(row.total_revenue));
+              });
+              
+              // Calculate seasonal indices
+              const overallAvgRevenue = historicalRevenue.reduce((sum, r) => 
+                sum + parseFloat(r.total_revenue), 0) / historicalRevenue.length;
+              
+              const seasonalIndices = {};
+              monthNames.forEach((m, i) => {
+                const monthData = monthlyAvgs[i + 1].revenue;
+                if (monthData.length > 0) {
+                  const monthAvg = monthData.reduce((a, b) => a + b, 0) / monthData.length;
+                  seasonalIndices[i + 1] = monthAvg / overallAvgRevenue;
+                } else {
+                  seasonalIndices[i + 1] = 1.0;
+                }
+              });
+              
+              // Calculate trend
+              const revenueValues = historicalRevenue.map(r => parseFloat(r.total_revenue));
+              let trend = 0;
+              if (revenueValues.length >= 6) {
+                const firstHalf = revenueValues.slice(0, Math.floor(revenueValues.length / 2));
+                const secondHalf = revenueValues.slice(Math.floor(revenueValues.length / 2));
+                const firstHalfAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+                const secondHalfAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+                trend = (secondHalfAvg - firstHalfAvg) / firstHalfAvg;
+              }
+              
+              // Calculate expense patterns
+              const expenseByCategory = {};
+              historicalExpenses.forEach(row => {
+                if (!expenseByCategory[row.category]) {
+                  expenseByCategory[row.category] = [];
+                }
+                expenseByCategory[row.category].push(parseFloat(row.total_amount));
+              });
+              
+              const avgExpenseByCategory = {};
+              Object.keys(expenseByCategory).forEach(cat => {
+                const values = expenseByCategory[cat];
+                avgExpenseByCategory[cat] = values.reduce((a, b) => a + b, 0) / values.length;
+              });
+              
+              return {
+                seasonal_indices: seasonalIndices,
+                trend_factor: trend,
+                avg_monthly_revenue: overallAvgRevenue,
+                avg_expenses_by_category: avgExpenseByCategory,
+                data_quality: {
+                  revenue_months: historicalRevenue.length,
+                  has_sufficient_data: historicalRevenue.length >= 12
+                }
+              };
+          inputs:
+            historical_revenue: "{{ nodes.get_historical_revenue.outputs.historical_revenue }}"
+            historical_expenses: "{{ nodes.get_historical_expenses.outputs.historical_expenses }}"
+          outputs:
+            - seasonal_indices
+            - trend_factor
+            - avg_monthly_revenue
+            - avg_expenses_by_category
+            - data_quality
+
+        # Step 2f: Calculate pipeline value
+        - id: analyze_pipeline
+          type: code
+          config:
+            language: javascript
+            code: |
+              const pipelineJobs = $input.pipeline_jobs;
+              
+              // Categorize by status and likelihood
+              const pipeline = {
+                estimates: { count: 0, value: 0, expected_value: 0 },
+                scheduled: { count: 0, value: 0, expected_value: 0 },
+                in_progress: { count: 0, value: 0, expected_value: 0 }
+              };
+              
+              // Conversion rates by status
+              const conversionRates = {
+                estimate: 0.35,
+                scheduled: 0.90,
+                in_progress: 0.98
+              };
+              
+              pipelineJobs.forEach(job => {
+                const value = parseFloat(job.total || job.quote_total || 0);
+                const status = job.status?.toLowerCase() || 'estimate';
+                const rate = conversionRates[status] || 0.5;
+                
+                if (status === 'estimate') {
+                  pipeline.estimates.count++;
+                  pipeline.estimates.value += value;
+                  pipeline.estimates.expected_value += value * rate;
+                } else if (status === 'scheduled') {
+                  pipeline.scheduled.count++;
+                  pipeline.scheduled.value += value;
+                  pipeline.scheduled.expected_value += value * rate;
+                } else if (status === 'in_progress' || status === 'in progress') {
+                  pipeline.in_progress.count++;
+                  pipeline.in_progress.value += value;
+                  pipeline.in_progress.expected_value += value * rate;
+                }
+              });
+              
+              const totalPipeline = pipeline.estimates.value + pipeline.scheduled.value + pipeline.in_progress.value;
+              const weightedPipeline = pipeline.estimates.expected_value + pipeline.scheduled.expected_value + pipeline.in_progress.expected_value;
+              
+              return {
+                pipeline_breakdown: pipeline,
+                total_pipeline_value: totalPipeline,
+                weighted_pipeline_value: weightedPipeline,
+                pipeline_count: pipelineJobs.length
+              };
+          inputs:
+            pipeline_jobs: "{{ nodes.get_pipeline.outputs.pipeline_jobs }}"
+          outputs:
+            - pipeline_breakdown
+            - total_pipeline_value
+            - weighted_pipeline_value
+            - pipeline_count
+
+        # Step 2g: Build scenario forecasts
+        - id: build_scenarios
+          type: code
+          config:
+            language: javascript
+            code: |
+              const patterns = {
+                seasonal_indices: $input.seasonal_indices,
+                trend_factor: $input.trend_factor,
+                avg_monthly_revenue: $input.avg_monthly_revenue,
+                avg_expenses: $input.avg_expenses_by_category
+              };
+              const pipeline = $input.pipeline;
+              const openAR = $input.open_ar;
+              const openAP = $input.open_ap;
+              const scenarios = $input.scenarios;
+              const currentCash = $input.current_cash;
+              
+              const today = new Date();
+              const results = {};
+              
+              // Build forecast for each scenario
+              Object.keys(scenarios).forEach(scenarioKey => {
+                const scenario = scenarios[scenarioKey];
+                const adj = scenario.adjustments;
+                
+                const forecast = [];
+                let runningCash = currentCash;
+                
+                // 13 week forecast
+                for (let week = 1; week <= 13; week++) {
+                  const weekDate = new Date(today);
+                  weekDate.setDate(weekDate.getDate() + (week * 7));
+                  const month = weekDate.getMonth() + 1;
+                  
+                  // Weekly revenue estimate
+                  const seasonalIndex = patterns.seasonal_indices[month] || 1.0;
+                  const adjustedSeasonal = 1 + ((seasonalIndex - 1) * adj.seasonal_impact);
+                  
+                  let weeklyRevenue = (patterns.avg_monthly_revenue / 4.33) * adj.revenue_factor * adjustedSeasonal;
+                  
+                  // Add trend
+                  weeklyRevenue *= (1 + (patterns.trend_factor * (week / 52)));
+                  
+                  // Add pipeline realization (distribute over weeks)
+                  const pipelinePerWeek = (pipeline.weighted_pipeline_value * adj.new_bookings_factor) / 13;
+                  weeklyRevenue += pipelinePerWeek;
+                  
+                  // AR collection (distribute open AR over expected collection period)
+                  const arCollection = week <= 6 
+                    ? (openAR.reduce((sum, inv) => sum + parseFloat(inv.Balance), 0) * adj.ar_collection_rate) / 6
+                    : weeklyRevenue * 0.85;
+                  
+                  // Weekly expenses
+                  const totalMonthlyExpenses = Object.values(patterns.avg_expenses).reduce((a, b) => a + b, 0);
+                  const weeklyExpenses = (totalMonthlyExpenses / 4.33) * adj.expense_factor;
+                  
+                  // AP payments
+                  const apPayment = week <= 4
+                    ? openAP.reduce((sum, bill) => sum + parseFloat(bill.Balance), 0) / 4
+                    : weeklyExpenses * 0.7;
+                  
+                  const netCashFlow = arCollection - weeklyExpenses - apPayment;
+                  runningCash += netCashFlow;
+                  
+                  forecast.push({
+                    week: week,
+                    week_start: weekDate.toISOString().split('T')[0],
+                    revenue_projection: weeklyRevenue,
+                    ar_collection: arCollection,
+                    expenses: weeklyExpenses,
+                    ap_payment: apPayment,
+                    net_cash_flow: netCashFlow,
+                    ending_cash: runningCash
+                  });
+                }
+                
+                // Calculate summary metrics
+                const minCash = Math.min(...forecast.map(f => f.ending_cash));
+                const minCashWeek = forecast.findIndex(f => f.ending_cash === minCash) + 1;
+                const endingCash = forecast[forecast.length - 1].ending_cash;
+                
+                results[scenarioKey] = {
+                  scenario_name: scenario.name,
+                  description: scenario.description,
+                  forecast: forecast,
+                  summary: {
+                    starting_cash: currentCash,
+                    ending_cash: endingCash,
+                    min_cash: minCash,
+                    min_cash_week: minCashWeek,
+                    total_revenue: forecast.reduce((sum, f) => sum + f.revenue_projection, 0),
+                    total_expenses: forecast.reduce((sum, f) => sum + f.expenses, 0),
+                    cash_change: endingCash - currentCash,
+                    cash_change_pct: ((endingCash - currentCash) / currentCash) * 100
+                  }
+                };
+              });
+              
+              return { scenario_forecasts: results };
+          inputs:
+            seasonal_indices: "{{ nodes.analyze_patterns.outputs.seasonal_indices }}"
+            trend_factor: "{{ nodes.analyze_patterns.outputs.trend_factor }}"
+            avg_monthly_revenue: "{{ nodes.analyze_patterns.outputs.avg_monthly_revenue }}"
+            avg_expenses_by_category: "{{ nodes.analyze_patterns.outputs.avg_expenses_by_category }}"
+            pipeline: "{{ nodes.analyze_pipeline.outputs }}"
+            open_ar: "{{ nodes.get_current_ar.outputs.open_ar }}"
+            open_ap: "{{ nodes.get_current_ap.outputs.open_ap }}"
+            scenarios: "{{ config.scenarios }}"
+            current_cash: "{{ tenant.current_cash_balance }}"
+          outputs:
+            - scenario_forecasts
+
+        # Step 2h: Calculate confidence intervals
+        - id: calculate_confidence
+          type: code
+          config:
+            language: javascript
+            code: |
+              const scenarios = $input.scenario_forecasts;
+              const dataQuality = $input.data_quality;
+              
+              const confidence = [];
+              
+              // Calculate confidence bands for each week
+              for (let week = 1; week <= 13; week++) {
+                const pessimistic = scenarios.pessimistic.forecast[week - 1];
+                const baseline = scenarios.baseline.forecast[week - 1];
+                const optimistic = scenarios.optimistic.forecast[week - 1];
+                
+                // Base confidence decreases over time
+                let baseConfidence = 0.95 - (week * 0.03);
+                
+                // Adjust for data quality
+                if (!dataQuality.has_sufficient_data) {
+                  baseConfidence *= 0.8;
+                }
+                
+                confidence.push({
+                  week: week,
+                  week_start: baseline.week_start,
+                  expected_cash: baseline.ending_cash,
+                  low_bound: pessimistic.ending_cash,
+                  high_bound: optimistic.ending_cash,
+                  confidence_level: Math.max(0.5, baseConfidence),
+                  variance: optimistic.ending_cash - pessimistic.ending_cash
+                });
+              }
+              
+              return { confidence_bands: confidence };
+          inputs:
+            scenario_forecasts: "{{ nodes.build_scenarios.outputs.scenario_forecasts }}"
+            data_quality: "{{ nodes.analyze_patterns.outputs.data_quality }}"
+          outputs:
+            - confidence_bands
+
+        # Step 2i: Generate risk assessment
+        - id: assess_risks
+          type: code
+          config:
+            language: javascript
+            code: |
+              const scenarios = $input.scenario_forecasts;
+              const pipeline = $input.pipeline;
+              const confidence = $input.confidence_bands;
+              
+              const risks = [];
+              
+              // Cash runway risk
+              const pessimisticMinCash = scenarios.pessimistic.summary.min_cash;
+              if (pessimisticMinCash < 0) {
+                risks.push({
+                  category: 'liquidity',
+                  severity: 'critical',
+                  title: 'Negative Cash Risk',
+                  description: `In pessimistic scenario, cash could go negative by Week ${scenarios.pessimistic.summary.min_cash_week}`,
+                  probability: 0.25,
+                  impact: Math.abs(pessimisticMinCash),
+                  mitigation: 'Accelerate collections, defer discretionary spending, arrange credit line'
+                });
+              } else if (pessimisticMinCash < 25000) {
+                risks.push({
+                  category: 'liquidity',
+                  severity: 'high',
+                  title: 'Low Cash Buffer Risk',
+                  description: 'Cash could drop below minimum operating buffer in pessimistic scenario',
+                  probability: 0.30,
+                  impact: 25000 - pessimisticMinCash,
+                  mitigation: 'Monitor weekly, have credit line on standby'
+                });
+              }
+              
+              // Pipeline concentration risk
+              if (pipeline.pipeline_count < 10) {
+                risks.push({
+                  category: 'revenue',
+                  severity: 'medium',
+                  title: 'Thin Pipeline',
+                  description: `Only ${pipeline.pipeline_count} jobs in pipeline - limited visibility`,
+                  probability: 0.40,
+                  impact: scenarios.baseline.summary.total_revenue * 0.2,
+                  mitigation: 'Increase marketing/sales activity'
+                });
+              }
+              
+              // Forecast uncertainty
+              const avgVariance = confidence.reduce((sum, c) => sum + c.variance, 0) / confidence.length;
+              if (avgVariance > scenarios.baseline.summary.ending_cash * 0.5) {
+                risks.push({
+                  category: 'forecast',
+                  severity: 'medium',
+                  title: 'High Forecast Uncertainty',
+                  description: 'Wide range between optimistic and pessimistic scenarios',
+                  probability: 0.50,
+                  impact: avgVariance,
+                  mitigation: 'Update forecast weekly, improve data quality'
+                });
+              }
+              
+              // Seasonality risk (if in slow season)
+              const currentMonth = new Date().getMonth() + 1;
+              if ([11, 12, 1, 2].includes(currentMonth)) {
+                risks.push({
+                  category: 'seasonal',
+                  severity: 'medium',
+                  title: 'Seasonal Slowdown',
+                  description: 'Currently in/approaching slow season for roofing',
+                  probability: 0.80,
+                  impact: scenarios.baseline.summary.total_revenue * 0.25,
+                  mitigation: 'Build cash reserves, focus on interior/commercial work'
+                });
+              }
+              
+              return {
+                risks: risks,
+                overall_risk_level: risks.some(r => r.severity === 'critical') ? 'critical' :
+                                   risks.some(r => r.severity === 'high') ? 'high' :
+                                   risks.some(r => r.severity === 'medium') ? 'medium' : 'low'
+              };
+          inputs:
+            scenario_forecasts: "{{ nodes.build_scenarios.outputs.scenario_forecasts }}"
+            pipeline: "{{ nodes.analyze_pipeline.outputs }}"
+            confidence_bands: "{{ nodes.calculate_confidence.outputs.confidence_bands }}"
+          outputs:
+            - risks
+            - overall_risk_level
+
+        # Step 2j: Store forecast results
+        - id: store_forecast
+          type: supabase_upsert
+          config:
+            table: forecast_scenarios
+            data:
+              tenant_id: "{{ tenant.id }}"
+              forecast_date: "{{ TODAY() }}"
+              baseline_forecast: "{{ nodes.build_scenarios.outputs.scenario_forecasts.baseline | json }}"
+              pessimistic_forecast: "{{ nodes.build_scenarios.outputs.scenario_forecasts.pessimistic | json }}"
+              optimistic_forecast: "{{ nodes.build_scenarios.outputs.scenario_forecasts.optimistic | json }}"
+              confidence_bands: "{{ nodes.calculate_confidence.outputs.confidence_bands | json }}"
+              risk_assessment: "{{ nodes.assess_risks.outputs | json }}"
+              patterns_used: "{{ nodes.analyze_patterns.outputs | json }}"
+              pipeline_snapshot: "{{ nodes.analyze_pipeline.outputs | json }}"
+              created_at: "{{ NOW() }}"
+            conflict_columns:
+              - tenant_id
+              - forecast_date
+
+        # Step 2k: Compare to previous forecast for accuracy tracking
+        - id: track_accuracy
+          type: code
+          config:
+            language: javascript
+            code: |
+              const lastForecast = $input.last_forecast;
+              const currentCash = $input.current_cash;
+              
+              if (!lastForecast || !lastForecast.baseline_forecast) {
+                return { accuracy_metrics: null };
+              }
+              
+              // Find the week in last forecast that corresponds to today
+              const today = new Date();
+              const lastForecastDate = new Date(lastForecast.forecast_date);
+              const weeksSinceForecast = Math.floor((today - lastForecastDate) / (7 * 24 * 60 * 60 * 1000));
+              
+              if (weeksSinceForecast < 1 || weeksSinceForecast > 13) {
+                return { accuracy_metrics: null };
+              }
+              
+              const predictedCash = lastForecast.baseline_forecast.forecast[weeksSinceForecast - 1]?.ending_cash;
+              if (!predictedCash) {
+                return { accuracy_metrics: null };
+              }
+              
+              const variance = currentCash - predictedCash;
+              const variancePct = (variance / predictedCash) * 100;
+              
+              return {
+                accuracy_metrics: {
+                  weeks_out: weeksSinceForecast,
+                  predicted_cash: predictedCash,
+                  actual_cash: currentCash,
+                  variance: variance,
+                  variance_pct: variancePct,
+                  within_confidence: Math.abs(variancePct) <= 15
+                }
+              };
+          inputs:
+            last_forecast: "{{ tenant.last_forecast }}"
+            current_cash: "{{ tenant.current_cash_balance }}"
+          outputs:
+            - accuracy_metrics
+
+        # Step 2l: Send forecast summary
+        - id: send_forecast_summary
+          type: slack_message
+          config:
+            channel: "{{ tenant.owner_slack_channel }}"
+            message: |
+              📊 *Weekly Forecast Update - {{ tenant.name }}*
+              _Forecast rebuilt {{ TODAY() }}_
+              
+              *13-Week Outlook by Scenario:*
+              
+              🔵 *Optimistic*
+              • Ending Cash: ${{ nodes.build_scenarios.outputs.scenario_forecasts.optimistic.summary.ending_cash | number_format(2) }}
+              • Change: {{ nodes.build_scenarios.outputs.scenario_forecasts.optimistic.summary.cash_change_pct | number_format(1) }}%
+              
+              🟢 *Baseline (Expected)*
+              • Ending Cash: ${{ nodes.build_scenarios.outputs.scenario_forecasts.baseline.summary.ending_cash | number_format(2) }}
+              • Change: {{ nodes.build_scenarios.outputs.scenario_forecasts.baseline.summary.cash_change_pct | number_format(1) }}%
+              • Min Cash: ${{ nodes.build_scenarios.outputs.scenario_forecasts.baseline.summary.min_cash | number_format(2) }} (Week {{ nodes.build_scenarios.outputs.scenario_forecasts.baseline.summary.min_cash_week }})
+              
+              🔴 *Pessimistic*
+              • Ending Cash: ${{ nodes.build_scenarios.outputs.scenario_forecasts.pessimistic.summary.ending_cash | number_format(2) }}
+              • Change: {{ nodes.build_scenarios.outputs.scenario_forecasts.pessimistic.summary.cash_change_pct | number_format(1) }}%
+              
+              *Pipeline:* ${{ nodes.analyze_pipeline.outputs.total_pipeline_value | number_format(2) }} total ({{ nodes.analyze_pipeline.outputs.pipeline_count }} jobs)
+              *Weighted Pipeline:* ${{ nodes.analyze_pipeline.outputs.weighted_pipeline_value | number_format(2) }}
+              
+              *Risk Level:* {{ nodes.assess_risks.outputs.overall_risk_level | upper }}
+              {% if nodes.assess_risks.outputs.risks.length > 0 %}
+              *Key Risks:*
+              {% for risk in nodes.assess_risks.outputs.risks | slice(0, 3) %}
+              • {{ risk.title }}: {{ risk.description | truncate(60) }}
+              {% endfor %}
+              {% endif %}
+
+# ============================================================================
+# DATABASE SCHEMA
+# ============================================================================
+schema:
+  forecast_scenarios:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        default: gen_random_uuid()
+      - name: tenant_id
+        type: uuid
+        references: tenants(id)
+        not_null: true
+      - name: forecast_date
+        type: date
+        not_null: true
+      - name: baseline_forecast
+        type: jsonb
+        not_null: true
+      - name: pessimistic_forecast
+        type: jsonb
+      - name: optimistic_forecast
+        type: jsonb
+      - name: confidence_bands
+        type: jsonb
+      - name: risk_assessment
+        type: jsonb
+      - name: patterns_used
+        type: jsonb
+      - name: pipeline_snapshot
+        type: jsonb
+      - name: created_at
+        type: timestamptz
+        default: now()
+    indexes:
+      - columns: [tenant_id, forecast_date]
+        unique: true
+      - columns: [tenant_id, created_at]
+    rls:
+      enabled: true
+      policy: "tenant_id = current_tenant_id()"
+
+  forecast_accuracy:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        default: gen_random_uuid()
+      - name: tenant_id
+        type: uuid
+        references: tenants(id)
+        not_null: true
+      - name: forecast_id
+        type: uuid
+        references: forecast_scenarios(id)
+      - name: weeks_out
+        type: integer
+        not_null: true
+      - name: predicted_cash
+        type: decimal(15,2)
+      - name: actual_cash
+        type: decimal(15,2)
+      - name: variance
+        type: decimal(15,2)
+      - name: variance_pct
+        type: decimal(8,2)
+      - name: measured_at
+        type: timestamptz
+        default: now()
+    indexes:
+      - columns: [tenant_id, weeks_out]
+    rls:
+      enabled: true
+      policy: "tenant_id = current_tenant_id()"
+
+# ============================================================================
+# ERROR HANDLING & MONITORING
+# ============================================================================
+error_handling:
+  retry_policy:
+    max_attempts: 2
+    backoff_multiplier: 2
+    initial_delay_seconds: 120
+
+  on_error:
+    - type: log_error
+      config:
+        table: workflow_errors
+        include_context: true
+    
+    - type: alert
+      config:
+        channel: slack
+        message: "Forecast rebuild error for {{ tenant.name }}: {{ error.message }}"
+        severity: warning
+
+monitoring:
+  metrics:
+    - name: forecast_rebuild_duration
+      type: histogram
+      labels: [tenant_id]
+    
+    - name: forecast_accuracy_variance
+      type: gauge
+      labels: [tenant_id, weeks_out]
+    
+    - name: scenario_spread
+      type: gauge
+      labels: [tenant_id]
+      description: "Difference between optimistic and pessimistic ending cash"

@@ -1,0 +1,703 @@
+# <!-- /automations/books_os/daily_transactions_ingest.yaml -->
+# Daily Transaction Ingestion Workflow for Books OS
+# Platform: n8n
+# Trade: Roofing Contractors ($1-10M revenue)
+
+name: daily_transactions_ingest
+description: |
+  Automated daily ingestion of bank transactions, credit card transactions,
+  and invoice/bill data from QuickBooks Online and field service platforms.
+  Runs classification pipeline and routes exceptions for human review.
+
+version: "1.0.0"
+trigger:
+  type: schedule
+  schedule:
+    cron: "0 6 * * *"  # 6 AM daily
+    timezone: "America/New_York"
+  
+  # Also allow manual trigger
+  webhook:
+    path: /webhooks/transactions/ingest
+    method: POST
+    auth: bearer_token
+
+# Environment variables required
+env_vars:
+  - QBO_CLIENT_ID
+  - QBO_CLIENT_SECRET
+  - QBO_REALM_ID
+  - JOBBER_API_KEY
+  - SERVICETITAN_API_KEY
+  - SUPABASE_URL
+  - SUPABASE_SERVICE_KEY
+  - OPENAI_API_KEY
+  - SLACK_WEBHOOK_URL
+
+nodes:
+  # ============================================================
+  # STEP 1: Get Active Tenants
+  # ============================================================
+  - id: get_active_tenants
+    type: supabase
+    operation: select
+    config:
+      table: tenants
+      columns: ["id", "name", "qbo_realm_id", "field_service_platform", "field_service_credentials"]
+      filters:
+        status: active
+        books_os_enabled: true
+    output: tenants
+
+  # ============================================================
+  # STEP 2: Loop Through Each Tenant
+  # ============================================================
+  - id: tenant_loop
+    type: loop
+    input: "{{ tenants }}"
+    nodes:
+      
+      # ----------------------------------------------------------
+      # 2.1: Determine last sync timestamp
+      # ----------------------------------------------------------
+      - id: get_last_sync
+        type: supabase
+        operation: select
+        config:
+          table: sync_logs
+          columns: ["completed_at"]
+          filters:
+            tenant_id: "{{ item.id }}"
+            sync_type: transactions_ingest
+            status: completed
+          order_by: completed_at
+          order: desc
+          limit: 1
+        output: last_sync
+
+      - id: set_sync_window
+        type: code
+        language: javascript
+        code: |
+          const lastSync = $input.last_sync?.[0]?.completed_at;
+          const defaultLookback = new Date();
+          defaultLookback.setDate(defaultLookback.getDate() - 2); // 2 days default
+          
+          return {
+            start_date: lastSync || defaultLookback.toISOString(),
+            end_date: new Date().toISOString(),
+            tenant_id: $input.item.id,
+            tenant_name: $input.item.name
+          };
+        output: sync_window
+
+      # ----------------------------------------------------------
+      # 2.2: Create sync log entry
+      # ----------------------------------------------------------
+      - id: create_sync_log
+        type: supabase
+        operation: insert
+        config:
+          table: sync_logs
+          data:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            sync_type: transactions_ingest
+            status: running
+            started_at: "{{ $now }}"
+            metadata:
+              start_date: "{{ sync_window.start_date }}"
+              end_date: "{{ sync_window.end_date }}"
+        output: sync_log
+
+      # ----------------------------------------------------------
+      # 2.3: Fetch Bank Transactions from QBO
+      # ----------------------------------------------------------
+      - id: fetch_qbo_bank_transactions
+        type: http_request
+        config:
+          method: GET
+          url: "https://quickbooks.api.intuit.com/v3/company/{{ item.qbo_realm_id }}/query"
+          headers:
+            Authorization: "Bearer {{ $credentials.qbo_access_token }}"
+            Accept: "application/json"
+          params:
+            query: |
+              SELECT * FROM Purchase 
+              WHERE MetaData.LastUpdatedTime >= '{{ sync_window.start_date }}'
+              AND MetaData.LastUpdatedTime <= '{{ sync_window.end_date }}'
+        on_error:
+          retry: 3
+          delay: 5000
+          fallback: log_qbo_error
+        output: qbo_purchases
+
+      - id: fetch_qbo_deposits
+        type: http_request
+        config:
+          method: GET
+          url: "https://quickbooks.api.intuit.com/v3/company/{{ item.qbo_realm_id }}/query"
+          headers:
+            Authorization: "Bearer {{ $credentials.qbo_access_token }}"
+            Accept: "application/json"
+          params:
+            query: |
+              SELECT * FROM Deposit 
+              WHERE MetaData.LastUpdatedTime >= '{{ sync_window.start_date }}'
+              AND MetaData.LastUpdatedTime <= '{{ sync_window.end_date }}'
+        on_error:
+          retry: 3
+          delay: 5000
+          fallback: log_qbo_error
+        output: qbo_deposits
+
+      - id: fetch_qbo_journal_entries
+        type: http_request
+        config:
+          method: GET
+          url: "https://quickbooks.api.intuit.com/v3/company/{{ item.qbo_realm_id }}/query"
+          headers:
+            Authorization: "Bearer {{ $credentials.qbo_access_token }}"
+            Accept: "application/json"
+          params:
+            query: |
+              SELECT * FROM JournalEntry 
+              WHERE MetaData.LastUpdatedTime >= '{{ sync_window.start_date }}'
+              AND MetaData.LastUpdatedTime <= '{{ sync_window.end_date }}'
+        on_error:
+          retry: 3
+          delay: 5000
+        output: qbo_journal_entries
+
+      # ----------------------------------------------------------
+      # 2.4: Fetch Credit Card Transactions
+      # ----------------------------------------------------------
+      - id: fetch_qbo_credit_card
+        type: http_request
+        config:
+          method: GET
+          url: "https://quickbooks.api.intuit.com/v3/company/{{ item.qbo_realm_id }}/query"
+          headers:
+            Authorization: "Bearer {{ $credentials.qbo_access_token }}"
+            Accept: "application/json"
+          params:
+            query: |
+              SELECT * FROM Purchase 
+              WHERE PaymentType = 'CreditCard'
+              AND MetaData.LastUpdatedTime >= '{{ sync_window.start_date }}'
+              AND MetaData.LastUpdatedTime <= '{{ sync_window.end_date }}'
+        output: qbo_credit_card
+
+      # ----------------------------------------------------------
+      # 2.5: Fetch Field Service Data (Jobber/ServiceTitan)
+      # ----------------------------------------------------------
+      - id: check_field_service_platform
+        type: switch
+        property: "{{ item.field_service_platform }}"
+        cases:
+          jobber:
+            - id: fetch_jobber_invoices
+              type: http_request
+              config:
+                method: POST
+                url: "https://api.getjobber.com/api/graphql"
+                headers:
+                  Authorization: "Bearer {{ item.field_service_credentials.api_key }}"
+                  Content-Type: "application/json"
+                body:
+                  query: |
+                    query {
+                      invoices(
+                        filter: { 
+                          updatedAt: { 
+                            gte: "{{ sync_window.start_date }}" 
+                          } 
+                        }
+                        first: 100
+                      ) {
+                        nodes {
+                          id
+                          invoiceNumber
+                          total
+                          status
+                          job { id title }
+                          client { id name }
+                          lineItems { 
+                            description 
+                            quantity 
+                            unitPrice 
+                          }
+                          createdAt
+                          updatedAt
+                        }
+                      }
+                    }
+              output: field_service_invoices
+
+            - id: fetch_jobber_expenses
+              type: http_request
+              config:
+                method: POST
+                url: "https://api.getjobber.com/api/graphql"
+                headers:
+                  Authorization: "Bearer {{ item.field_service_credentials.api_key }}"
+                  Content-Type: "application/json"
+                body:
+                  query: |
+                    query {
+                      expenses(
+                        filter: { 
+                          updatedAt: { 
+                            gte: "{{ sync_window.start_date }}" 
+                          } 
+                        }
+                        first: 100
+                      ) {
+                        nodes {
+                          id
+                          title
+                          total
+                          job { id title }
+                          category
+                          reimburseEmployee
+                          createdAt
+                        }
+                      }
+                    }
+              output: field_service_expenses
+
+          servicetitan:
+            - id: fetch_st_invoices
+              type: http_request
+              config:
+                method: GET
+                url: "https://api.servicetitan.io/accounting/v2/invoices"
+                headers:
+                  Authorization: "Bearer {{ item.field_service_credentials.api_key }}"
+                params:
+                  modifiedOnOrAfter: "{{ sync_window.start_date }}"
+                  pageSize: 100
+              output: field_service_invoices
+
+            - id: fetch_st_payments
+              type: http_request
+              config:
+                method: GET
+                url: "https://api.servicetitan.io/accounting/v2/payments"
+                headers:
+                  Authorization: "Bearer {{ item.field_service_credentials.api_key }}"
+                params:
+                  modifiedOnOrAfter: "{{ sync_window.start_date }}"
+                  pageSize: 100
+              output: field_service_payments
+
+          default:
+            - id: skip_field_service
+              type: noop
+              output: 
+                field_service_invoices: []
+                field_service_expenses: []
+
+      # ----------------------------------------------------------
+      # 2.6: Transform and Normalize Transactions
+      # ----------------------------------------------------------
+      - id: normalize_transactions
+        type: code
+        language: javascript
+        code: |
+          const transactions = [];
+          
+          // Normalize QBO Purchases
+          for (const purchase of $input.qbo_purchases?.QueryResponse?.Purchase || []) {
+            transactions.push({
+              tenant_id: $input.sync_window.tenant_id,
+              external_id: purchase.Id,
+              external_source: 'quickbooks',
+              external_type: 'Purchase',
+              transaction_date: purchase.TxnDate,
+              amount: Math.abs(purchase.TotalAmt),
+              direction: 'debit',
+              description: purchase.PrivateNote || purchase.Line?.[0]?.Description || '',
+              vendor_name: purchase.EntityRef?.name || null,
+              vendor_id: purchase.EntityRef?.value || null,
+              payment_method: purchase.PaymentType,
+              raw_data: purchase,
+              status: 'pending_classification',
+              created_at: new Date().toISOString()
+            });
+          }
+          
+          // Normalize QBO Deposits
+          for (const deposit of $input.qbo_deposits?.QueryResponse?.Deposit || []) {
+            transactions.push({
+              tenant_id: $input.sync_window.tenant_id,
+              external_id: deposit.Id,
+              external_source: 'quickbooks',
+              external_type: 'Deposit',
+              transaction_date: deposit.TxnDate,
+              amount: Math.abs(deposit.TotalAmt),
+              direction: 'credit',
+              description: deposit.PrivateNote || '',
+              customer_name: deposit.Line?.[0]?.LinkedTxn?.[0]?.CustomerRef?.name || null,
+              raw_data: deposit,
+              status: 'pending_classification',
+              created_at: new Date().toISOString()
+            });
+          }
+          
+          // Normalize Credit Card transactions
+          for (const cc of $input.qbo_credit_card?.QueryResponse?.Purchase || []) {
+            transactions.push({
+              tenant_id: $input.sync_window.tenant_id,
+              external_id: cc.Id,
+              external_source: 'quickbooks',
+              external_type: 'CreditCardPurchase',
+              transaction_date: cc.TxnDate,
+              amount: Math.abs(cc.TotalAmt),
+              direction: 'debit',
+              description: cc.PrivateNote || cc.Line?.[0]?.Description || '',
+              vendor_name: cc.EntityRef?.name || null,
+              raw_data: cc,
+              status: 'pending_classification',
+              created_at: new Date().toISOString()
+            });
+          }
+          
+          return { 
+            normalized_transactions: transactions,
+            count: transactions.length 
+          };
+        output: normalized
+
+      # ----------------------------------------------------------
+      # 2.7: Deduplicate Against Existing
+      # ----------------------------------------------------------
+      - id: check_duplicates
+        type: supabase
+        operation: select
+        config:
+          table: transactions_raw
+          columns: ["external_id", "external_source"]
+          filters:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            external_source: quickbooks
+        output: existing_transactions
+
+      - id: filter_new_transactions
+        type: code
+        language: javascript
+        code: |
+          const existing = new Set(
+            $input.existing_transactions.map(t => `${t.external_source}:${t.external_id}`)
+          );
+          
+          const newTransactions = $input.normalized.normalized_transactions.filter(t => 
+            !existing.has(`${t.external_source}:${t.external_id}`)
+          );
+          
+          return {
+            new_transactions: newTransactions,
+            new_count: newTransactions.length,
+            duplicate_count: $input.normalized.count - newTransactions.length
+          };
+        output: filtered
+
+      # ----------------------------------------------------------
+      # 2.8: Insert Raw Transactions
+      # ----------------------------------------------------------
+      - id: insert_raw_transactions
+        type: supabase
+        operation: insert
+        config:
+          table: transactions_raw
+          data: "{{ filtered.new_transactions }}"
+          on_conflict: ignore
+        condition: "{{ filtered.new_count > 0 }}"
+        output: inserted
+
+      # ----------------------------------------------------------
+      # 2.9: Run Classification Agent
+      # ----------------------------------------------------------
+      - id: classify_transactions
+        type: loop
+        input: "{{ filtered.new_transactions }}"
+        batch_size: 10  # Process in batches of 10
+        nodes:
+          - id: call_classification_agent
+            type: http_request
+            config:
+              method: POST
+              url: "{{ $env.AGENT_API_URL }}/agents/classification/classify"
+              headers:
+                Authorization: "Bearer {{ $env.AGENT_API_KEY }}"
+                Content-Type: "application/json"
+              body:
+                transaction_id: "{{ item.id }}"
+                tenant_id: "{{ item.tenant_id }}"
+                transaction_data:
+                  amount: "{{ item.amount }}"
+                  direction: "{{ item.direction }}"
+                  description: "{{ item.description }}"
+                  vendor_name: "{{ item.vendor_name }}"
+                  transaction_date: "{{ item.transaction_date }}"
+              timeout: 30000
+            on_error:
+              retry: 2
+              delay: 2000
+              fallback: mark_classification_failed
+            output: classification_result
+
+          - id: update_transaction_classification
+            type: supabase
+            operation: update
+            config:
+              table: transactions_raw
+              filters:
+                id: "{{ item.id }}"
+              data:
+                status: "{{ classification_result.status }}"
+                classification_confidence: "{{ classification_result.confidence }}"
+                suggested_account_id: "{{ classification_result.account_id }}"
+                suggested_cost_code_id: "{{ classification_result.cost_code_id }}"
+                suggested_job_id: "{{ classification_result.job_id }}"
+                classification_reason: "{{ classification_result.reason }}"
+                classified_at: "{{ $now }}"
+
+      # ----------------------------------------------------------
+      # 2.10: Auto-Approve High Confidence Classifications
+      # ----------------------------------------------------------
+      - id: auto_approve_high_confidence
+        type: supabase
+        operation: update
+        config:
+          table: transactions_raw
+          filters:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            status: pending_review
+            classification_confidence:
+              gte: 0.95
+          data:
+            status: approved
+            approved_at: "{{ $now }}"
+            approved_by: system
+            auto_approved: true
+
+      # ----------------------------------------------------------
+      # 2.11: Create Categorized Transaction Records
+      # ----------------------------------------------------------
+      - id: get_approved_transactions
+        type: supabase
+        operation: select
+        config:
+          table: transactions_raw
+          columns: ["*"]
+          filters:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            status: approved
+            categorized_at: null
+
+      - id: create_categorized_records
+        type: code
+        language: javascript
+        code: |
+          const categorized = $input.get_approved_transactions.map(t => ({
+            tenant_id: t.tenant_id,
+            raw_transaction_id: t.id,
+            account_id: t.suggested_account_id,
+            cost_code_id: t.suggested_cost_code_id,
+            job_id: t.suggested_job_id,
+            amount: t.amount,
+            direction: t.direction,
+            transaction_date: t.transaction_date,
+            description: t.description,
+            classification_method: t.classification_method || 'rules',
+            confidence_score: t.classification_confidence,
+            qbo_sync_status: 'pending',
+            created_at: new Date().toISOString()
+          }));
+          
+          return { categorized_records: categorized };
+        output: categorized_data
+
+      - id: insert_categorized_transactions
+        type: supabase
+        operation: insert
+        config:
+          table: transactions_categorized
+          data: "{{ categorized_data.categorized_records }}"
+        condition: "{{ categorized_data.categorized_records.length > 0 }}"
+
+      # ----------------------------------------------------------
+      # 2.12: Update Raw Transactions as Categorized
+      # ----------------------------------------------------------
+      - id: mark_as_categorized
+        type: supabase
+        operation: update
+        config:
+          table: transactions_raw
+          filters:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            status: approved
+            categorized_at: null
+          data:
+            categorized_at: "{{ $now }}"
+
+      # ----------------------------------------------------------
+      # 2.13: Count Exceptions
+      # ----------------------------------------------------------
+      - id: count_exceptions
+        type: supabase
+        operation: select
+        config:
+          table: transactions_raw
+          columns: ["id"]
+          filters:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            status: exception
+          count: true
+        output: exception_count
+
+      - id: count_pending_review
+        type: supabase
+        operation: select
+        config:
+          table: transactions_raw
+          columns: ["id"]
+          filters:
+            tenant_id: "{{ sync_window.tenant_id }}"
+            status: pending_review
+          count: true
+        output: pending_review_count
+
+      # ----------------------------------------------------------
+      # 2.14: Send Notification if Exceptions Exist
+      # ----------------------------------------------------------
+      - id: notify_exceptions
+        type: switch
+        condition: "{{ exception_count.count > 0 || pending_review_count.count > 5 }}"
+        cases:
+          true:
+            - id: send_slack_notification
+              type: http_request
+              config:
+                method: POST
+                url: "{{ $env.SLACK_WEBHOOK_URL }}"
+                body:
+                  text: "📋 *Daily Transaction Ingest Complete*"
+                  blocks:
+                    - type: section
+                      text:
+                        type: mrkdwn
+                        text: |
+                          *{{ sync_window.tenant_name }}* - Transaction Ingest Summary
+                          
+                          ✅ New transactions: {{ filtered.new_count }}
+                          ⏳ Pending review: {{ pending_review_count.count }}
+                          ⚠️ Exceptions: {{ exception_count.count }}
+                    - type: actions
+                      elements:
+                        - type: button
+                          text:
+                            type: plain_text
+                            text: "Review Transactions"
+                          url: "{{ $env.APP_URL }}/tenants/{{ sync_window.tenant_id }}/transactions/review"
+
+      # ----------------------------------------------------------
+      # 2.15: Update Sync Log
+      # ----------------------------------------------------------
+      - id: update_sync_log_success
+        type: supabase
+        operation: update
+        config:
+          table: sync_logs
+          filters:
+            id: "{{ sync_log.id }}"
+          data:
+            status: completed
+            completed_at: "{{ $now }}"
+            metadata:
+              start_date: "{{ sync_window.start_date }}"
+              end_date: "{{ sync_window.end_date }}"
+              new_transactions: "{{ filtered.new_count }}"
+              duplicates_skipped: "{{ filtered.duplicate_count }}"
+              auto_approved: "{{ auto_approve_count || 0 }}"
+              pending_review: "{{ pending_review_count.count }}"
+              exceptions: "{{ exception_count.count }}"
+
+# Error Handlers
+error_handlers:
+  - id: log_qbo_error
+    type: code
+    language: javascript
+    code: |
+      console.error('QBO API Error:', $error);
+      return {
+        error: true,
+        message: $error.message,
+        source: 'quickbooks'
+      };
+
+  - id: mark_classification_failed
+    type: supabase
+    operation: update
+    config:
+      table: transactions_raw
+      filters:
+        id: "{{ item.id }}"
+      data:
+        status: classification_failed
+        error_message: "{{ $error.message }}"
+
+  - id: global_error_handler
+    type: code
+    language: javascript
+    code: |
+      // Log error to monitoring
+      console.error('Workflow Error:', {
+        node: $error.node,
+        message: $error.message,
+        tenant: $context.tenant_id
+      });
+      
+      // Update sync log with error
+      return {
+        sync_status: 'failed',
+        error: $error.message
+      };
+
+# Monitoring & Alerts
+monitoring:
+  metrics:
+    - name: daily_ingest_duration
+      type: histogram
+      description: "Time to complete daily ingest per tenant"
+      
+    - name: transactions_ingested
+      type: counter
+      description: "Total transactions ingested"
+      labels: ["tenant_id", "source"]
+      
+    - name: classification_success_rate
+      type: gauge
+      description: "Percentage of successful classifications"
+      
+    - name: exception_rate
+      type: gauge
+      description: "Percentage of transactions marked as exceptions"
+
+  alerts:
+    - name: high_exception_rate
+      condition: "exception_rate > 0.25"
+      severity: warning
+      notification: slack
+      
+    - name: ingest_failure
+      condition: "sync_status == 'failed'"
+      severity: critical
+      notification: 
+        - slack
+        - email
+        
+    - name: slow_ingest
+      condition: "duration_minutes > 30"
+      severity: warning
+      notification: slack

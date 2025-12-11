@@ -1,0 +1,745 @@
+# <!-- filename: /automations/finance_command_center/cfo_weekly_brief.yaml -->
+# ============================================================================
+# CFO WEEKLY BRIEF AUTOMATION
+# AI-generated executive financial summary with narrative insights
+# Platform: n8n + Dify/LangChain
+# ============================================================================
+
+name: cfo_weekly_brief
+description: |
+  Weekly CFO-style financial brief that:
+  - Aggregates key financial metrics from the week
+  - Generates AI-powered narrative insights
+  - Highlights risks, opportunities, and recommended actions
+  - Delivers personalized executive summary
+
+# ============================================================================
+# METADATA
+# ============================================================================
+metadata:
+  version: "1.0.0"
+  module: finance_command_center
+  owner: spec-os
+  dependencies:
+    - supabase
+    - quickbooks_online
+    - llm_service  # Claude/GPT-4
+    - email_service
+    - slack_notifications
+
+# ============================================================================
+# TRIGGERS
+# ============================================================================
+triggers:
+  # Primary: Weekly Friday afternoon
+  - id: weekly_trigger
+    type: schedule
+    config:
+      cron: "0 16 * * 5"  # 4 PM Friday
+      timezone: "America/Chicago"
+    description: "Weekly CFO brief generation"
+
+  # Secondary: Month-end brief (more comprehensive)
+  - id: month_end_trigger
+    type: schedule
+    config:
+      cron: "0 10 1 * *"  # 10 AM on 1st of month
+      timezone: "America/Chicago"
+    description: "Monthly comprehensive CFO brief"
+
+  # On-demand
+  - id: manual_trigger
+    type: webhook
+    config:
+      path: "/webhook/cfo-brief"
+      method: POST
+      body_schema:
+        tenant_id: string
+        brief_type: "weekly | monthly | custom"
+    description: "Manual brief generation"
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+config:
+  llm_settings:
+    model: "claude-3-5-sonnet-20241022"  # or gpt-4-turbo
+    temperature: 0.3  # Lower for more consistent output
+    max_tokens: 2000
+    
+  brief_sections:
+    - id: executive_summary
+      title: "Executive Summary"
+      required: true
+    - id: cash_position
+      title: "Cash Position & Forecast"
+      required: true
+    - id: revenue_performance
+      title: "Revenue Performance"
+      required: true
+    - id: job_margins
+      title: "Job Profitability"
+      required: true
+    - id: ar_ap_health
+      title: "AR/AP Health"
+      required: true
+    - id: risks_opportunities
+      title: "Risks & Opportunities"
+      required: true
+    - id: recommended_actions
+      title: "Recommended Actions"
+      required: true
+    - id: looking_ahead
+      title: "Looking Ahead"
+      required: false
+
+  narrative_style:
+    tone: "professional, direct, actionable"
+    audience: "busy roofing contractor owner"
+    format: "executive brief with bullet points for key items"
+    constraints:
+      - "Avoid jargon - use plain language"
+      - "Lead with the most important information"
+      - "Quantify everything possible"
+      - "Include specific recommendations with expected impact"
+      - "Flag items requiring owner attention with priority"
+
+# ============================================================================
+# WORKFLOW: WEEKLY BRIEF GENERATION
+# ============================================================================
+workflow_weekly_brief:
+  name: generate_cfo_weekly_brief
+  
+  nodes:
+    # Step 1: Get active tenants
+    - id: get_tenants
+      type: supabase_query
+      config:
+        query: |
+          SELECT 
+            t.*,
+            u.name as owner_name,
+            u.email as owner_email
+          FROM tenants t
+          JOIN users u ON t.owner_user_id = u.id
+          WHERE t.status = 'active'
+            AND t.finance_module_enabled = true
+            AND t.weekly_brief_enabled = true
+      outputs:
+        - tenants
+
+    # Step 2: Process each tenant
+    - id: tenant_loop
+      type: loop
+      config:
+        items: "{{ nodes.get_tenants.outputs.tenants }}"
+        variable: tenant
+      children:
+        
+        # Step 2a: Gather this week's financial data
+        - id: get_week_data
+          type: parallel
+          children:
+            # Cash position
+            - id: get_cash_data
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    cp.cash_balance,
+                    cp.forecast_summary,
+                    cp.as_of_date,
+                    LAG(cp.cash_balance) OVER (ORDER BY cp.as_of_date) as prior_balance
+                  FROM cash_positions cp
+                  WHERE cp.tenant_id = '{{ tenant.id }}'
+                  ORDER BY cp.as_of_date DESC
+                  LIMIT 2
+              outputs:
+                - cash_data
+
+            # Revenue this week
+            - id: get_revenue_data
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    SUM(amount) as week_revenue,
+                    COUNT(DISTINCT job_id) as jobs_completed,
+                    AVG(amount) as avg_job_revenue
+                  FROM job_revenue
+                  WHERE tenant_id = '{{ tenant.id }}'
+                    AND revenue_date >= DATE_TRUNC('week', CURRENT_DATE)
+              outputs:
+                - revenue_data
+
+            # MTD Revenue
+            - id: get_mtd_revenue
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    SUM(amount) as mtd_revenue,
+                    COUNT(DISTINCT job_id) as mtd_jobs
+                  FROM job_revenue
+                  WHERE tenant_id = '{{ tenant.id }}'
+                    AND revenue_date >= DATE_TRUNC('month', CURRENT_DATE)
+              outputs:
+                - mtd_revenue
+
+            # Prior period comparison
+            - id: get_prior_week
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    SUM(amount) as prior_week_revenue
+                  FROM job_revenue
+                  WHERE tenant_id = '{{ tenant.id }}'
+                    AND revenue_date >= DATE_TRUNC('week', CURRENT_DATE) - INTERVAL '1 week'
+                    AND revenue_date < DATE_TRUNC('week', CURRENT_DATE)
+              outputs:
+                - prior_week
+
+            # Job margins this week
+            - id: get_job_margins
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    j.job_number,
+                    j.customer_name,
+                    j.contract_amount,
+                    j.total_cost,
+                    j.gross_margin_pct,
+                    j.status
+                  FROM jobs j
+                  WHERE j.tenant_id = '{{ tenant.id }}'
+                    AND j.completed_date >= DATE_TRUNC('week', CURRENT_DATE)
+                  ORDER BY j.contract_amount DESC
+                  LIMIT 10
+              outputs:
+                - job_margins
+
+            # AR aging
+            - id: get_ar_aging
+              type: quickbooks_api
+              config:
+                operation: report
+                report_type: AgedReceivables
+                realm_id: "{{ tenant.qbo_realm_id }}"
+              outputs:
+                - ar_aging
+
+            # AP aging
+            - id: get_ap_aging
+              type: quickbooks_api
+              config:
+                operation: report
+                report_type: AgedPayables
+                realm_id: "{{ tenant.qbo_realm_id }}"
+              outputs:
+                - ap_aging
+
+            # Latest forecast
+            - id: get_forecast
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    baseline_forecast,
+                    risk_assessment,
+                    confidence_bands
+                  FROM forecast_scenarios
+                  WHERE tenant_id = '{{ tenant.id }}'
+                  ORDER BY forecast_date DESC
+                  LIMIT 1
+              outputs:
+                - forecast
+
+            # Pipeline/backlog
+            - id: get_pipeline
+              type: supabase_query
+              config:
+                query: |
+                  SELECT 
+                    COUNT(*) FILTER (WHERE status = 'estimate') as estimates,
+                    SUM(contract_amount) FILTER (WHERE status = 'estimate') as estimate_value,
+                    COUNT(*) FILTER (WHERE status IN ('scheduled', 'in_progress')) as backlog_jobs,
+                    SUM(contract_amount - COALESCE(amount_invoiced, 0)) 
+                      FILTER (WHERE status IN ('scheduled', 'in_progress')) as backlog_value
+                  FROM jobs
+                  WHERE tenant_id = '{{ tenant.id }}'
+                    AND status NOT IN ('completed', 'cancelled')
+              outputs:
+                - pipeline
+
+        # Step 2b: Compile metrics package
+        - id: compile_metrics
+          type: code
+          config:
+            language: javascript
+            code: |
+              const cashData = $input.cash_data[0] || {};
+              const revenueData = $input.revenue_data[0] || {};
+              const mtdRevenue = $input.mtd_revenue[0] || {};
+              const priorWeek = $input.prior_week[0] || {};
+              const jobMargins = $input.job_margins || [];
+              const arAging = $input.ar_aging;
+              const apAging = $input.ap_aging;
+              const forecast = $input.forecast[0] || {};
+              const pipeline = $input.pipeline[0] || {};
+              
+              // Parse AR aging
+              let arTotal = 0, arCurrent = 0, arOverdue = 0;
+              if (arAging?.Rows?.Row) {
+                arAging.Rows.Row.forEach(row => {
+                  if (row.Summary?.ColData) {
+                    const cols = row.Summary.ColData;
+                    arTotal += parseFloat(cols[cols.length - 1]?.value || 0);
+                  }
+                });
+              }
+              
+              // Calculate week-over-week change
+              const weekRevenue = parseFloat(revenueData.week_revenue || 0);
+              const priorWeekRevenue = parseFloat(priorWeek.prior_week_revenue || 0);
+              const wowChange = priorWeekRevenue > 0 
+                ? ((weekRevenue - priorWeekRevenue) / priorWeekRevenue) * 100 
+                : 0;
+              
+              // Calculate average margin
+              const margins = jobMargins.map(j => parseFloat(j.gross_margin_pct || 0));
+              const avgMargin = margins.length > 0 
+                ? margins.reduce((a, b) => a + b, 0) / margins.length 
+                : 0;
+              
+              // Cash position
+              const currentCash = parseFloat(cashData.cash_balance || 0);
+              const priorCash = parseFloat(cashData.prior_balance || currentCash);
+              const cashChange = currentCash - priorCash;
+              
+              // Forecast summary
+              const forecastSummary = forecast.baseline_forecast?.summary || {};
+              const risks = forecast.risk_assessment?.risks || [];
+              
+              return {
+                metrics: {
+                  // Cash
+                  current_cash: currentCash,
+                  cash_change: cashChange,
+                  cash_change_pct: priorCash > 0 ? (cashChange / priorCash) * 100 : 0,
+                  cash_runway_weeks: forecastSummary.cash_runway_weeks || 'N/A',
+                  
+                  // Revenue
+                  week_revenue: weekRevenue,
+                  mtd_revenue: parseFloat(mtdRevenue.mtd_revenue || 0),
+                  wow_change_pct: wowChange,
+                  jobs_completed_week: parseInt(revenueData.jobs_completed || 0),
+                  avg_job_revenue: parseFloat(revenueData.avg_job_revenue || 0),
+                  
+                  // Margins
+                  avg_gross_margin: avgMargin,
+                  top_jobs: jobMargins.slice(0, 5),
+                  margin_outliers: jobMargins.filter(j => parseFloat(j.gross_margin_pct) < 25),
+                  
+                  // AR/AP
+                  ar_total: arTotal,
+                  ap_total: 0, // Would parse from apAging similarly
+                  
+                  // Pipeline
+                  estimate_count: parseInt(pipeline.estimates || 0),
+                  estimate_value: parseFloat(pipeline.estimate_value || 0),
+                  backlog_jobs: parseInt(pipeline.backlog_jobs || 0),
+                  backlog_value: parseFloat(pipeline.backlog_value || 0),
+                  
+                  // Forecast
+                  forecast_end_cash: forecastSummary.ending_cash || currentCash,
+                  forecast_min_cash: forecastSummary.min_cash || currentCash,
+                  forecast_min_week: forecastSummary.min_cash_week || 'N/A',
+                  
+                  // Risks
+                  risk_level: forecast.risk_assessment?.overall_risk_level || 'unknown',
+                  top_risks: risks.slice(0, 3)
+                },
+                raw_data: {
+                  job_margins: jobMargins,
+                  forecast: forecast,
+                  ar_aging: arAging,
+                  ap_aging: apAging
+                }
+              };
+          inputs:
+            cash_data: "{{ nodes.get_cash_data.outputs.cash_data }}"
+            revenue_data: "{{ nodes.get_revenue_data.outputs.revenue_data }}"
+            mtd_revenue: "{{ nodes.get_mtd_revenue.outputs.mtd_revenue }}"
+            prior_week: "{{ nodes.get_prior_week.outputs.prior_week }}"
+            job_margins: "{{ nodes.get_job_margins.outputs.job_margins }}"
+            ar_aging: "{{ nodes.get_ar_aging.outputs.ar_aging }}"
+            ap_aging: "{{ nodes.get_ap_aging.outputs.ap_aging }}"
+            forecast: "{{ nodes.get_forecast.outputs.forecast }}"
+            pipeline: "{{ nodes.get_pipeline.outputs.pipeline }}"
+          outputs:
+            - metrics
+            - raw_data
+
+        # Step 2c: Generate AI narrative
+        - id: generate_narrative
+          type: llm_completion
+          config:
+            model: "{{ config.llm_settings.model }}"
+            temperature: "{{ config.llm_settings.temperature }}"
+            max_tokens: "{{ config.llm_settings.max_tokens }}"
+            system_prompt: |
+              You are a fractional CFO for a roofing contractor business. Generate a weekly 
+              financial brief for the business owner. Your tone should be professional but 
+              accessible - avoid accounting jargon. Be direct and actionable.
+              
+              The owner is busy and needs to quickly understand:
+              1. Overall financial health (good/concerning/critical)
+              2. Key numbers that matter this week
+              3. What requires their attention
+              4. Specific actions to take
+              
+              Format guidelines:
+              - Lead with a 2-3 sentence executive summary
+              - Use bullet points for lists
+              - Quantify impacts when possible (e.g., "collecting overdue AR could improve cash by $X")
+              - Prioritize recommendations (high/medium/low)
+              - End with "Looking Ahead" section on what to watch next week
+              
+              Keep the entire brief under 800 words.
+            prompt: |
+              Generate a weekly CFO brief for {{ tenant.name }} based on these metrics:
+              
+              **Company:** {{ tenant.name }}
+              **Owner:** {{ tenant.owner_name }}
+              **Week Ending:** {{ TODAY() }}
+              
+              **CASH POSITION:**
+              - Current Cash: ${{ metrics.current_cash | number_format(2) }}
+              - Change from Last Week: ${{ metrics.cash_change | number_format(2) }} ({{ metrics.cash_change_pct | number_format(1) }}%)
+              - Cash Runway: {{ metrics.cash_runway_weeks }} weeks
+              - 13-Week Forecast End: ${{ metrics.forecast_end_cash | number_format(2) }}
+              - Forecast Low Point: ${{ metrics.forecast_min_cash | number_format(2) }} in Week {{ metrics.forecast_min_week }}
+              
+              **REVENUE:**
+              - This Week: ${{ metrics.week_revenue | number_format(2) }}
+              - Week-over-Week Change: {{ metrics.wow_change_pct | number_format(1) }}%
+              - Month-to-Date: ${{ metrics.mtd_revenue | number_format(2) }}
+              - Jobs Completed This Week: {{ metrics.jobs_completed_week }}
+              - Average Job Revenue: ${{ metrics.avg_job_revenue | number_format(2) }}
+              
+              **JOB PROFITABILITY:**
+              - Average Gross Margin: {{ metrics.avg_gross_margin | number_format(1) }}%
+              - Jobs Below 25% Margin: {{ metrics.margin_outliers.length }}
+              {% if metrics.margin_outliers.length > 0 %}
+              - Low Margin Jobs: {% for job in metrics.margin_outliers %}{{ job.job_number }} ({{ job.gross_margin_pct }}%){% if not loop.last %}, {% endif %}{% endfor %}
+              {% endif %}
+              
+              **AR/AP:**
+              - Total AR Outstanding: ${{ metrics.ar_total | number_format(2) }}
+              - Total AP Outstanding: ${{ metrics.ap_total | number_format(2) }}
+              
+              **PIPELINE:**
+              - Open Estimates: {{ metrics.estimate_count }} worth ${{ metrics.estimate_value | number_format(2) }}
+              - Backlog: {{ metrics.backlog_jobs }} jobs worth ${{ metrics.backlog_value | number_format(2) }}
+              
+              **RISK ASSESSMENT:**
+              - Overall Risk Level: {{ metrics.risk_level | upper }}
+              {% if metrics.top_risks.length > 0 %}
+              - Key Risks:
+              {% for risk in metrics.top_risks %}
+                * {{ risk.title }}: {{ risk.description }}
+              {% endfor %}
+              {% endif %}
+              
+              Generate the weekly CFO brief now.
+          inputs:
+            tenant: "{{ tenant }}"
+            metrics: "{{ nodes.compile_metrics.outputs.metrics }}"
+          outputs:
+            - narrative
+
+        # Step 2d: Format final brief
+        - id: format_brief
+          type: code
+          config:
+            language: javascript
+            code: |
+              const tenant = $input.tenant;
+              const metrics = $input.metrics;
+              const narrative = $input.narrative;
+              const today = new Date().toISOString().split('T')[0];
+              
+              // Build formatted HTML email
+              const htmlBrief = `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <style>
+                  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 700px; margin: 0 auto; }
+                  .header { background: #1a365d; color: white; padding: 20px; text-align: center; }
+                  .header h1 { margin: 0; font-size: 24px; }
+                  .header .date { font-size: 14px; opacity: 0.8; }
+                  .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 20px; background: #f7fafc; }
+                  .metric-card { background: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                  .metric-value { font-size: 24px; font-weight: bold; color: #1a365d; }
+                  .metric-label { font-size: 12px; color: #666; text-transform: uppercase; }
+                  .metric-change { font-size: 12px; }
+                  .positive { color: #38a169; }
+                  .negative { color: #e53e3e; }
+                  .content { padding: 20px; }
+                  .section { margin-bottom: 25px; }
+                  .section h2 { color: #1a365d; font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+                  .footer { background: #f7fafc; padding: 15px; text-align: center; font-size: 12px; color: #666; }
+                </style>
+              </head>
+              <body>
+                <div class="header">
+                  <h1>Weekly CFO Brief</h1>
+                  <div class="date">${tenant.name} | Week of ${today}</div>
+                </div>
+                
+                <div class="metrics-grid">
+                  <div class="metric-card">
+                    <div class="metric-value">$${(metrics.current_cash / 1000).toFixed(0)}K</div>
+                    <div class="metric-label">Cash Balance</div>
+                    <div class="metric-change ${metrics.cash_change >= 0 ? 'positive' : 'negative'}">
+                      ${metrics.cash_change >= 0 ? '↑' : '↓'} ${Math.abs(metrics.cash_change_pct).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-value">$${(metrics.week_revenue / 1000).toFixed(0)}K</div>
+                    <div class="metric-label">Week Revenue</div>
+                    <div class="metric-change ${metrics.wow_change_pct >= 0 ? 'positive' : 'negative'}">
+                      ${metrics.wow_change_pct >= 0 ? '↑' : '↓'} ${Math.abs(metrics.wow_change_pct).toFixed(1)}% WoW
+                    </div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-value">${metrics.avg_gross_margin.toFixed(0)}%</div>
+                    <div class="metric-label">Avg Margin</div>
+                    <div class="metric-change">${metrics.jobs_completed_week} jobs</div>
+                  </div>
+                </div>
+                
+                <div class="content">
+                  ${narrative.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/^- /gm, '• ')}
+                </div>
+                
+                <div class="footer">
+                  Generated by Spec-OS Finance Command Center<br>
+                  View full dashboard: <a href="https://app.spec-os.com/dashboard/${tenant.id}">app.spec-os.com/dashboard</a>
+                </div>
+              </body>
+              </html>
+              `;
+              
+              // Plain text version
+              const textBrief = `
+              WEEKLY CFO BRIEF - ${tenant.name}
+              Week of ${today}
+              ============================================
+              
+              KEY METRICS:
+              • Cash Balance: $${metrics.current_cash.toLocaleString()} (${metrics.cash_change >= 0 ? '+' : ''}${metrics.cash_change_pct.toFixed(1)}%)
+              • Week Revenue: $${metrics.week_revenue.toLocaleString()} (${metrics.wow_change_pct >= 0 ? '+' : ''}${metrics.wow_change_pct.toFixed(1)}% WoW)
+              • Avg Gross Margin: ${metrics.avg_gross_margin.toFixed(1)}%
+              • Cash Runway: ${metrics.cash_runway_weeks} weeks
+              
+              ============================================
+              
+              ${narrative}
+              
+              ============================================
+              Generated by Spec-OS Finance Command Center
+              `;
+              
+              return {
+                html_brief: htmlBrief,
+                text_brief: textBrief,
+                subject: `Weekly CFO Brief - ${tenant.name} - ${today}`
+              };
+          inputs:
+            tenant: "{{ tenant }}"
+            metrics: "{{ nodes.compile_metrics.outputs.metrics }}"
+            narrative: "{{ nodes.generate_narrative.outputs.narrative }}"
+          outputs:
+            - html_brief
+            - text_brief
+            - subject
+
+        # Step 2e: Store brief
+        - id: store_brief
+          type: supabase_insert
+          config:
+            table: cfo_briefs
+            data:
+              tenant_id: "{{ tenant.id }}"
+              brief_date: "{{ TODAY() }}"
+              brief_type: "weekly"
+              metrics_snapshot: "{{ nodes.compile_metrics.outputs.metrics | json }}"
+              narrative: "{{ nodes.generate_narrative.outputs.narrative }}"
+              html_content: "{{ nodes.format_brief.outputs.html_brief }}"
+              created_at: "{{ NOW() }}"
+
+        # Step 2f: Send email
+        - id: send_email
+          type: email_send
+          config:
+            to: "{{ tenant.owner_email }}"
+            subject: "{{ nodes.format_brief.outputs.subject }}"
+            html: "{{ nodes.format_brief.outputs.html_brief }}"
+            text: "{{ nodes.format_brief.outputs.text_brief }}"
+
+        # Step 2g: Send Slack summary
+        - id: send_slack
+          type: slack_message
+          config:
+            channel: "{{ tenant.owner_slack_channel }}"
+            message: |
+              📊 *Weekly CFO Brief Ready*
+              _{{ tenant.name }} | Week of {{ TODAY() }}_
+              
+              *Quick Stats:*
+              • Cash: ${{ nodes.compile_metrics.outputs.metrics.current_cash | number_format(2) }} ({{ nodes.compile_metrics.outputs.metrics.cash_change >= 0 ? '↑' : '↓' }}{{ nodes.compile_metrics.outputs.metrics.cash_change_pct | abs | number_format(1) }}%)
+              • Revenue: ${{ nodes.compile_metrics.outputs.metrics.week_revenue | number_format(2) }} this week
+              • Margin: {{ nodes.compile_metrics.outputs.metrics.avg_gross_margin | number_format(1) }}% avg
+              • Risk Level: {{ nodes.compile_metrics.outputs.metrics.risk_level | upper }}
+              
+              📧 Full brief sent to your email.
+
+# ============================================================================
+# LLM PROMPT TEMPLATES
+# ============================================================================
+llm_prompts:
+  # Alternative prompt for monthly briefs (more comprehensive)
+  monthly_brief:
+    system: |
+      You are a fractional CFO preparing a monthly financial review for a roofing contractor.
+      This is a more comprehensive report than the weekly brief. Include:
+      - Month-over-month trends
+      - Year-over-year comparisons where available
+      - Seasonal context (roofing is seasonal)
+      - Crew performance insights
+      - Material cost trends
+      - Recommendations for the coming month
+      
+    prompt: |
+      Generate a monthly CFO report for {{ tenant.name }}.
+      
+      **MONTHLY FINANCIALS:**
+      - Revenue: ${{ monthly_revenue }}
+      - Expenses: ${{ monthly_expenses }}
+      - Net Income: ${{ monthly_net_income }}
+      - Gross Margin: {{ gross_margin_pct }}%
+      
+      **COMPARISON:**
+      - Prior Month Revenue: ${{ prior_month_revenue }}
+      - Same Month Last Year: ${{ same_month_ly_revenue }}
+      
+      **JOBS COMPLETED:**
+      {{ jobs_summary }}
+      
+      **CASH FLOW:**
+      - Starting Cash: ${{ starting_cash }}
+      - Ending Cash: ${{ ending_cash }}
+      - Net Change: ${{ cash_change }}
+      
+      Generate a comprehensive monthly CFO report.
+
+# ============================================================================
+# DATABASE SCHEMA
+# ============================================================================
+schema:
+  cfo_briefs:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        default: gen_random_uuid()
+      - name: tenant_id
+        type: uuid
+        references: tenants(id)
+        not_null: true
+      - name: brief_date
+        type: date
+        not_null: true
+      - name: brief_type
+        type: text
+        not_null: true
+        check: "brief_type IN ('weekly', 'monthly', 'custom')"
+      - name: metrics_snapshot
+        type: jsonb
+        not_null: true
+      - name: narrative
+        type: text
+      - name: html_content
+        type: text
+      - name: delivery_status
+        type: text
+        default: "'pending'"
+      - name: opened_at
+        type: timestamptz
+      - name: created_at
+        type: timestamptz
+        default: now()
+    indexes:
+      - columns: [tenant_id, brief_date]
+        unique: true
+      - columns: [tenant_id, brief_type, created_at]
+    rls:
+      enabled: true
+      policy: "tenant_id = current_tenant_id()"
+
+# ============================================================================
+# ERROR HANDLING
+# ============================================================================
+error_handling:
+  retry_policy:
+    max_attempts: 2
+    backoff_multiplier: 2
+    initial_delay_seconds: 60
+
+  on_error:
+    - type: log_error
+      config:
+        table: workflow_errors
+        include_context: true
+    
+    - type: fallback
+      action: |
+        # If LLM fails, send metrics-only brief
+        Send simplified brief with just metrics, no narrative
+
+  llm_fallback:
+    # If primary LLM unavailable, use fallback
+    primary: "claude-3-5-sonnet-20241022"
+    fallback: "gpt-4-turbo-preview"
+
+# ============================================================================
+# MONITORING
+# ============================================================================
+monitoring:
+  metrics:
+    - name: brief_generation_duration
+      type: histogram
+      labels: [tenant_id, brief_type]
+    
+    - name: brief_delivery_success
+      type: counter
+      labels: [tenant_id, channel]
+    
+    - name: brief_open_rate
+      type: gauge
+      labels: [tenant_id]
+
+  alerts:
+    - name: brief_generation_failed
+      condition: "workflow_error"
+      severity: warning
+      message: "CFO brief generation failed for {{ tenant_name }}"
+    
+    - name: llm_api_error
+      condition: "llm_error"
+      severity: warning
+      message: "LLM API error in CFO brief generation"

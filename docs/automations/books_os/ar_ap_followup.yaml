@@ -1,0 +1,878 @@
+# <!-- filename: /automations/books_os/ar_ap_followup.yaml -->
+# ============================================================================
+# AR/AP FOLLOWUP AUTOMATION
+# Automated accounts receivable and accounts payable management workflow
+# Platform: n8n
+# ============================================================================
+
+name: ar_ap_followup
+description: |
+  Automated AR/AP management workflow that:
+  - Identifies overdue invoices and sends collection reminders
+  - Tracks upcoming AP payments and alerts for cash management
+  - Generates aging reports and escalation notifications
+  - Prioritizes follow-ups based on amount and days overdue
+
+# ============================================================================
+# METADATA
+# ============================================================================
+metadata:
+  version: "1.0.0"
+  module: books_os
+  owner: spec-os
+  dependencies:
+    - quickbooks_online
+    - jobber_or_servicetitan
+    - email_service
+    - slack_notifications
+    - supabase
+
+# ============================================================================
+# TRIGGERS
+# ============================================================================
+triggers:
+  # Primary: Daily morning run
+  - id: daily_morning_trigger
+    type: schedule
+    config:
+      cron: "0 8 * * 1-5"  # 8 AM Mon-Fri
+      timezone: "America/Chicago"
+    description: "Daily AR/AP review and follow-up"
+
+  # Secondary: Weekly aging report
+  - id: weekly_aging_trigger
+    type: schedule
+    config:
+      cron: "0 9 * * 1"  # 9 AM Monday
+      timezone: "America/Chicago"
+    description: "Weekly comprehensive aging analysis"
+
+  # On-demand: Manual trigger
+  - id: manual_trigger
+    type: webhook
+    config:
+      path: "/webhook/ar-ap-followup"
+      method: POST
+    description: "Manual AR/AP review trigger"
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+config:
+  ar_settings:
+    # Days thresholds for AR aging buckets
+    aging_buckets:
+      - name: "current"
+        min_days: 0
+        max_days: 30
+        action: none
+      - name: "31-60"
+        min_days: 31
+        max_days: 60
+        action: friendly_reminder
+      - name: "61-90"
+        min_days: 61
+        max_days: 90
+        action: formal_reminder
+      - name: "over_90"
+        min_days: 91
+        max_days: null
+        action: escalation
+    
+    # Reminder sequence
+    reminder_sequence:
+      - days_overdue: 7
+        type: soft_reminder
+        channel: email
+        template: ar_soft_reminder
+      - days_overdue: 14
+        type: friendly_reminder
+        channel: email
+        template: ar_friendly_reminder
+      - days_overdue: 30
+        type: formal_reminder
+        channel: email
+        template: ar_formal_reminder
+        cc_owner: true
+      - days_overdue: 45
+        type: phone_followup
+        channel: slack
+        template: ar_phone_task
+        assign_to: office_manager
+      - days_overdue: 60
+        type: escalation
+        channel: email
+        template: ar_escalation
+        cc_owner: true
+        flag_for_review: true
+      - days_overdue: 90
+        type: collection_warning
+        channel: email
+        template: ar_collection_warning
+        cc_owner: true
+        require_approval: true
+    
+    # Collection priorities
+    priority_thresholds:
+      high: 10000  # > $10K overdue
+      medium: 5000  # $5K - $10K
+      low: 0       # < $5K
+    
+    # Skip conditions
+    skip_customers:
+      - has_payment_plan: true
+      - dispute_open: true
+      - vip_flag: true
+
+  ap_settings:
+    # Payment timing alerts
+    payment_alerts:
+      - days_until_due: 7
+        alert_type: upcoming
+        channel: slack
+        priority: low
+      - days_until_due: 3
+        alert_type: due_soon
+        channel: slack
+        priority: medium
+      - days_until_due: 0
+        alert_type: due_today
+        channel: slack
+        priority: high
+      - days_overdue: 1
+        alert_type: overdue
+        channel: slack
+        priority: critical
+    
+    # Early payment discount tracking
+    discount_tracking:
+      enabled: true
+      alert_days_before_deadline: 2
+    
+    # Cash management thresholds
+    cash_requirements:
+      min_buffer: 25000  # Minimum cash buffer after AP
+      alert_threshold: 50000  # Alert if AP due > this in next 7 days
+
+# ============================================================================
+# WORKFLOW: ACCOUNTS RECEIVABLE
+# ============================================================================
+workflow_ar:
+  name: accounts_receivable_followup
+  
+  nodes:
+    # Step 1: Get active tenants
+    - id: get_tenants
+      type: supabase_query
+      config:
+        query: |
+          SELECT t.id, t.name, t.qbo_realm_id, t.ar_settings
+          FROM tenants t
+          WHERE t.status = 'active'
+            AND t.ar_automation_enabled = true
+      outputs:
+        - tenants
+
+    # Step 2: Loop through each tenant
+    - id: tenant_loop
+      type: loop
+      config:
+        items: "{{ nodes.get_tenants.outputs.tenants }}"
+        variable: tenant
+      children:
+        
+        # Step 2a: Fetch open invoices from QBO
+        - id: fetch_open_invoices
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Invoice
+            query: |
+              SELECT * FROM Invoice 
+              WHERE Balance > '0' 
+              ORDER BY DueDate ASC
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - invoices
+
+        # Step 2b: Enrich with customer data
+        - id: enrich_customer_data
+          type: quickbooks_api
+          config:
+            operation: batch_query
+            entity: Customer
+            ids: "{{ nodes.fetch_open_invoices.outputs.invoices | map('CustomerRef.value') | unique }}"
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - customers
+
+        # Step 2c: Get reminder history
+        - id: get_reminder_history
+          type: supabase_query
+          config:
+            query: |
+              SELECT invoice_id, reminder_type, sent_at, response_received
+              FROM ar_reminders
+              WHERE tenant_id = '{{ tenant.id }}'
+                AND sent_at > NOW() - INTERVAL '90 days'
+          outputs:
+            - reminder_history
+
+        # Step 2d: Calculate aging and priority
+        - id: calculate_aging
+          type: code
+          config:
+            language: javascript
+            code: |
+              const invoices = $input.invoices;
+              const customers = $input.customers;
+              const reminderHistory = $input.reminder_history;
+              const today = new Date();
+              
+              const enrichedInvoices = invoices.map(inv => {
+                const customer = customers.find(c => c.Id === inv.CustomerRef.value);
+                const dueDate = new Date(inv.DueDate);
+                const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                
+                // Get last reminder sent
+                const invReminders = reminderHistory.filter(r => r.invoice_id === inv.Id);
+                const lastReminder = invReminders.length > 0 
+                  ? invReminders.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at))[0]
+                  : null;
+                
+                // Determine aging bucket
+                let agingBucket = 'current';
+                if (daysOverdue > 90) agingBucket = 'over_90';
+                else if (daysOverdue > 60) agingBucket = '61-90';
+                else if (daysOverdue > 30) agingBucket = '31-60';
+                
+                // Calculate priority score
+                const balanceScore = inv.Balance > 10000 ? 3 : inv.Balance > 5000 ? 2 : 1;
+                const ageScore = daysOverdue > 60 ? 3 : daysOverdue > 30 ? 2 : 1;
+                const priorityScore = balanceScore + ageScore;
+                
+                return {
+                  ...inv,
+                  customer: customer,
+                  days_overdue: daysOverdue,
+                  aging_bucket: agingBucket,
+                  priority_score: priorityScore,
+                  priority: priorityScore >= 5 ? 'high' : priorityScore >= 3 ? 'medium' : 'low',
+                  last_reminder: lastReminder,
+                  needs_reminder: true  // Will be refined in next step
+                };
+              });
+              
+              return { enriched_invoices: enrichedInvoices };
+          inputs:
+            invoices: "{{ nodes.fetch_open_invoices.outputs.invoices }}"
+            customers: "{{ nodes.enrich_customer_data.outputs.customers }}"
+            reminder_history: "{{ nodes.get_reminder_history.outputs.reminder_history }}"
+          outputs:
+            - enriched_invoices
+
+        # Step 2e: Determine required actions
+        - id: determine_actions
+          type: code
+          config:
+            language: javascript
+            code: |
+              const invoices = $input.enriched_invoices;
+              const reminderSequence = $input.reminder_sequence;
+              const skipConditions = $input.skip_customers;
+              
+              const actionsNeeded = [];
+              
+              invoices.forEach(inv => {
+                // Check skip conditions
+                if (inv.customer?.PaymentTerms?.includes('Plan')) return;
+                if (inv.customer?.Notes?.includes('DISPUTE')) return;
+                if (inv.customer?.Notes?.includes('VIP')) return;
+                
+                // Find appropriate reminder based on days overdue
+                const applicableReminders = reminderSequence.filter(r => 
+                  inv.days_overdue >= r.days_overdue
+                );
+                
+                if (applicableReminders.length === 0) return;
+                
+                // Get the most escalated reminder that applies
+                const currentReminder = applicableReminders[applicableReminders.length - 1];
+                
+                // Check if this reminder was already sent
+                if (inv.last_reminder && inv.last_reminder.reminder_type === currentReminder.type) {
+                  // Check if enough time has passed to re-send (7 days minimum)
+                  const daysSinceLastReminder = Math.floor(
+                    (new Date() - new Date(inv.last_reminder.sent_at)) / (1000 * 60 * 60 * 24)
+                  );
+                  if (daysSinceLastReminder < 7) return;
+                }
+                
+                actionsNeeded.push({
+                  invoice: inv,
+                  action: currentReminder,
+                  invoice_id: inv.Id,
+                  customer_id: inv.CustomerRef.value,
+                  customer_name: inv.customer?.DisplayName || 'Unknown',
+                  customer_email: inv.customer?.PrimaryEmailAddr?.Address,
+                  amount: inv.Balance,
+                  days_overdue: inv.days_overdue,
+                  priority: inv.priority
+                });
+              });
+              
+              // Sort by priority (high first) then amount
+              actionsNeeded.sort((a, b) => {
+                const priorityOrder = { high: 0, medium: 1, low: 2 };
+                if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+                  return priorityOrder[a.priority] - priorityOrder[b.priority];
+                }
+                return b.amount - a.amount;
+              });
+              
+              return { actions: actionsNeeded };
+          inputs:
+            enriched_invoices: "{{ nodes.calculate_aging.outputs.enriched_invoices }}"
+            reminder_sequence: "{{ config.ar_settings.reminder_sequence }}"
+            skip_customers: "{{ config.ar_settings.skip_customers }}"
+          outputs:
+            - actions
+
+        # Step 2f: Process each action
+        - id: action_loop
+          type: loop
+          config:
+            items: "{{ nodes.determine_actions.outputs.actions }}"
+            variable: action_item
+          children:
+            
+            # Switch based on action type
+            - id: action_switch
+              type: switch
+              config:
+                property: "{{ action_item.action.channel }}"
+                cases:
+                  - value: email
+                    nodes:
+                      - id: send_ar_email
+                        type: email_send
+                        config:
+                          to: "{{ action_item.customer_email }}"
+                          cc: "{{ action_item.action.cc_owner ? tenant.owner_email : '' }}"
+                          template: "{{ action_item.action.template }}"
+                          variables:
+                            customer_name: "{{ action_item.customer_name }}"
+                            invoice_number: "{{ action_item.invoice.DocNumber }}"
+                            amount: "{{ action_item.amount }}"
+                            due_date: "{{ action_item.invoice.DueDate }}"
+                            days_overdue: "{{ action_item.days_overdue }}"
+                            company_name: "{{ tenant.name }}"
+                            payment_link: "{{ tenant.payment_portal_url }}"
+                        
+                  - value: slack
+                    nodes:
+                      - id: create_followup_task
+                        type: slack_message
+                        config:
+                          channel: "{{ tenant.ar_slack_channel }}"
+                          message: |
+                            📞 *AR Phone Follow-up Required*
+                            
+                            *Customer:* {{ action_item.customer_name }}
+                            *Invoice:* #{{ action_item.invoice.DocNumber }}
+                            *Amount:* ${{ action_item.amount | number_format(2) }}
+                            *Days Overdue:* {{ action_item.days_overdue }}
+                            *Priority:* {{ action_item.priority | upper }}
+                            
+                            Previous email reminders sent. Phone follow-up recommended.
+                          attachments:
+                            - title: "Customer Contact"
+                              text: "{{ action_item.customer_email }}\n{{ action_item.invoice.customer.PrimaryPhone?.FreeFormNumber || 'No phone on file' }}"
+
+            # Log the action
+            - id: log_reminder
+              type: supabase_insert
+              config:
+                table: ar_reminders
+                data:
+                  tenant_id: "{{ tenant.id }}"
+                  invoice_id: "{{ action_item.invoice_id }}"
+                  customer_id: "{{ action_item.customer_id }}"
+                  reminder_type: "{{ action_item.action.type }}"
+                  channel: "{{ action_item.action.channel }}"
+                  sent_at: "{{ NOW() }}"
+                  amount_at_reminder: "{{ action_item.amount }}"
+
+        # Step 2g: Generate daily AR summary
+        - id: generate_ar_summary
+          type: code
+          config:
+            language: javascript
+            code: |
+              const invoices = $input.enriched_invoices;
+              const actions = $input.actions;
+              
+              // Calculate totals by aging bucket
+              const agingSummary = {
+                current: { count: 0, total: 0 },
+                '31-60': { count: 0, total: 0 },
+                '61-90': { count: 0, total: 0 },
+                'over_90': { count: 0, total: 0 }
+              };
+              
+              invoices.forEach(inv => {
+                agingSummary[inv.aging_bucket].count++;
+                agingSummary[inv.aging_bucket].total += parseFloat(inv.Balance);
+              });
+              
+              const totalAR = Object.values(agingSummary).reduce((sum, b) => sum + b.total, 0);
+              const overdueAR = agingSummary['31-60'].total + agingSummary['61-90'].total + agingSummary['over_90'].total;
+              
+              return {
+                summary: {
+                  total_ar: totalAR,
+                  overdue_ar: overdueAR,
+                  aging: agingSummary,
+                  reminders_sent: actions.length,
+                  high_priority_count: actions.filter(a => a.priority === 'high').length
+                }
+              };
+          inputs:
+            enriched_invoices: "{{ nodes.calculate_aging.outputs.enriched_invoices }}"
+            actions: "{{ nodes.determine_actions.outputs.actions }}"
+          outputs:
+            - summary
+
+        # Step 2h: Send daily AR digest to owner
+        - id: send_ar_digest
+          type: slack_message
+          config:
+            channel: "{{ tenant.owner_slack_channel }}"
+            message: |
+              📊 *Daily AR Summary - {{ tenant.name }}*
+              
+              *Total Outstanding AR:* ${{ nodes.generate_ar_summary.outputs.summary.total_ar | number_format(2) }}
+              *Overdue AR (>30 days):* ${{ nodes.generate_ar_summary.outputs.summary.overdue_ar | number_format(2) }}
+              
+              *Aging Breakdown:*
+              • Current (0-30): ${{ nodes.generate_ar_summary.outputs.summary.aging.current.total | number_format(2) }} ({{ nodes.generate_ar_summary.outputs.summary.aging.current.count }} invoices)
+              • 31-60 days: ${{ nodes.generate_ar_summary.outputs.summary.aging['31-60'].total | number_format(2) }} ({{ nodes.generate_ar_summary.outputs.summary.aging['31-60'].count }} invoices)
+              • 61-90 days: ${{ nodes.generate_ar_summary.outputs.summary.aging['61-90'].total | number_format(2) }} ({{ nodes.generate_ar_summary.outputs.summary.aging['61-90'].count }} invoices)
+              • Over 90 days: ${{ nodes.generate_ar_summary.outputs.summary.aging.over_90.total | number_format(2) }} ({{ nodes.generate_ar_summary.outputs.summary.aging.over_90.count }} invoices)
+              
+              *Actions Today:*
+              • Reminders sent: {{ nodes.generate_ar_summary.outputs.summary.reminders_sent }}
+              • High priority follow-ups: {{ nodes.generate_ar_summary.outputs.summary.high_priority_count }}
+          condition: "{{ nodes.generate_ar_summary.outputs.summary.overdue_ar > 0 }}"
+
+# ============================================================================
+# WORKFLOW: ACCOUNTS PAYABLE
+# ============================================================================
+workflow_ap:
+  name: accounts_payable_management
+  
+  nodes:
+    # Step 1: Get active tenants
+    - id: get_tenants_ap
+      type: supabase_query
+      config:
+        query: |
+          SELECT t.id, t.name, t.qbo_realm_id, t.ap_settings
+          FROM tenants t
+          WHERE t.status = 'active'
+            AND t.ap_automation_enabled = true
+      outputs:
+        - tenants
+
+    # Step 2: Loop through each tenant
+    - id: tenant_loop_ap
+      type: loop
+      config:
+        items: "{{ nodes.get_tenants_ap.outputs.tenants }}"
+        variable: tenant
+      children:
+        
+        # Step 2a: Fetch unpaid bills from QBO
+        - id: fetch_unpaid_bills
+          type: quickbooks_api
+          config:
+            operation: query
+            entity: Bill
+            query: |
+              SELECT * FROM Bill 
+              WHERE Balance > '0' 
+              ORDER BY DueDate ASC
+            realm_id: "{{ tenant.qbo_realm_id }}"
+          outputs:
+            - bills
+
+        # Step 2b: Get current cash position
+        - id: get_cash_position
+          type: supabase_query
+          config:
+            query: |
+              SELECT cash_balance, last_updated
+              FROM cash_positions
+              WHERE tenant_id = '{{ tenant.id }}'
+              ORDER BY last_updated DESC
+              LIMIT 1
+          outputs:
+            - cash_position
+
+        # Step 2c: Calculate AP aging and cash requirements
+        - id: calculate_ap_aging
+          type: code
+          config:
+            language: javascript
+            code: |
+              const bills = $input.bills;
+              const cashPosition = $input.cash_position[0]?.cash_balance || 0;
+              const today = new Date();
+              
+              const enrichedBills = bills.map(bill => {
+                const dueDate = new Date(bill.DueDate);
+                const daysUntilDue = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
+                
+                // Check for early payment discounts
+                let hasDiscount = false;
+                let discountDeadline = null;
+                let discountAmount = 0;
+                
+                if (bill.SalesTermRef?.value) {
+                  // Check for 2/10 Net 30 type terms
+                  const terms = bill.SalesTermRef.name || '';
+                  if (terms.includes('2/10') || terms.includes('1/10')) {
+                    const invoiceDate = new Date(bill.TxnDate);
+                    discountDeadline = new Date(invoiceDate.getTime() + 10 * 24 * 60 * 60 * 1000);
+                    if (discountDeadline > today) {
+                      hasDiscount = true;
+                      discountAmount = bill.Balance * 0.02;  // 2% discount
+                    }
+                  }
+                }
+                
+                return {
+                  ...bill,
+                  days_until_due: daysUntilDue,
+                  is_overdue: daysUntilDue < 0,
+                  days_overdue: daysUntilDue < 0 ? Math.abs(daysUntilDue) : 0,
+                  has_discount: hasDiscount,
+                  discount_deadline: discountDeadline,
+                  discount_amount: discountAmount
+                };
+              });
+              
+              // Calculate upcoming payment requirements
+              const next7Days = enrichedBills
+                .filter(b => b.days_until_due >= 0 && b.days_until_due <= 7)
+                .reduce((sum, b) => sum + parseFloat(b.Balance), 0);
+              
+              const next14Days = enrichedBills
+                .filter(b => b.days_until_due >= 0 && b.days_until_due <= 14)
+                .reduce((sum, b) => sum + parseFloat(b.Balance), 0);
+              
+              const overdueTotal = enrichedBills
+                .filter(b => b.is_overdue)
+                .reduce((sum, b) => sum + parseFloat(b.Balance), 0);
+              
+              const discountOpportunities = enrichedBills.filter(b => b.has_discount);
+              
+              return {
+                enriched_bills: enrichedBills,
+                cash_position: cashPosition,
+                ap_next_7_days: next7Days,
+                ap_next_14_days: next14Days,
+                ap_overdue: overdueTotal,
+                discount_opportunities: discountOpportunities,
+                cash_after_7_day_ap: cashPosition - next7Days,
+                cash_buffer_ok: (cashPosition - next7Days) >= 25000
+              };
+          inputs:
+            bills: "{{ nodes.fetch_unpaid_bills.outputs.bills }}"
+            cash_position: "{{ nodes.get_cash_position.outputs.cash_position }}"
+          outputs:
+            - enriched_bills
+            - cash_position
+            - ap_next_7_days
+            - ap_next_14_days
+            - ap_overdue
+            - discount_opportunities
+            - cash_after_7_day_ap
+            - cash_buffer_ok
+
+        # Step 2d: Generate AP alerts
+        - id: generate_ap_alerts
+          type: code
+          config:
+            language: javascript
+            code: |
+              const bills = $input.enriched_bills;
+              const paymentAlerts = $input.payment_alerts;
+              const discountOpportunities = $input.discount_opportunities;
+              const cashBufferOk = $input.cash_buffer_ok;
+              const cashAfter7Day = $input.cash_after_7_day_ap;
+              
+              const alerts = [];
+              
+              // Cash buffer warning
+              if (!cashBufferOk) {
+                alerts.push({
+                  type: 'cash_warning',
+                  priority: 'critical',
+                  message: `Cash buffer below $25K after 7-day AP. Projected: $${cashAfter7Day.toFixed(2)}`,
+                  action_required: true
+                });
+              }
+              
+              // Individual bill alerts
+              bills.forEach(bill => {
+                paymentAlerts.forEach(alertConfig => {
+                  let matches = false;
+                  
+                  if (alertConfig.days_until_due !== undefined && bill.days_until_due === alertConfig.days_until_due) {
+                    matches = true;
+                  }
+                  if (alertConfig.days_overdue !== undefined && bill.days_overdue >= alertConfig.days_overdue && bill.is_overdue) {
+                    matches = true;
+                  }
+                  
+                  if (matches) {
+                    alerts.push({
+                      type: alertConfig.alert_type,
+                      priority: alertConfig.priority,
+                      bill_id: bill.Id,
+                      vendor_name: bill.VendorRef?.name || 'Unknown Vendor',
+                      amount: bill.Balance,
+                      due_date: bill.DueDate,
+                      days_until_due: bill.days_until_due
+                    });
+                  }
+                });
+              });
+              
+              // Early payment discount alerts
+              discountOpportunities.forEach(bill => {
+                const daysUntilDiscountExpires = Math.floor(
+                  (new Date(bill.discount_deadline) - new Date()) / (1000 * 60 * 60 * 24)
+                );
+                
+                if (daysUntilDiscountExpires <= 2 && daysUntilDiscountExpires >= 0) {
+                  alerts.push({
+                    type: 'discount_expiring',
+                    priority: 'medium',
+                    bill_id: bill.Id,
+                    vendor_name: bill.VendorRef?.name || 'Unknown Vendor',
+                    amount: bill.Balance,
+                    discount_amount: bill.discount_amount,
+                    discount_deadline: bill.discount_deadline
+                  });
+                }
+              });
+              
+              return { alerts };
+          inputs:
+            enriched_bills: "{{ nodes.calculate_ap_aging.outputs.enriched_bills }}"
+            payment_alerts: "{{ config.ap_settings.payment_alerts }}"
+            discount_opportunities: "{{ nodes.calculate_ap_aging.outputs.discount_opportunities }}"
+            cash_buffer_ok: "{{ nodes.calculate_ap_aging.outputs.cash_buffer_ok }}"
+            cash_after_7_day_ap: "{{ nodes.calculate_ap_aging.outputs.cash_after_7_day_ap }}"
+          outputs:
+            - alerts
+
+        # Step 2e: Send AP alerts
+        - id: send_ap_alerts
+          type: loop
+          config:
+            items: "{{ nodes.generate_ap_alerts.outputs.alerts }}"
+            variable: alert
+          children:
+            - id: format_alert_message
+              type: slack_message
+              config:
+                channel: "{{ tenant.ap_slack_channel }}"
+                message: |
+                  {% if alert.type == 'cash_warning' %}
+                  🚨 *CASH ALERT*
+                  {{ alert.message }}
+                  Review upcoming payments and prioritize or defer as needed.
+                  {% elif alert.type == 'overdue' %}
+                  ⚠️ *OVERDUE BILL*
+                  *Vendor:* {{ alert.vendor_name }}
+                  *Amount:* ${{ alert.amount | number_format(2) }}
+                  *Days Overdue:* {{ alert.days_until_due | abs }}
+                  Pay immediately to avoid late fees or service disruption.
+                  {% elif alert.type == 'due_today' %}
+                  📅 *BILL DUE TODAY*
+                  *Vendor:* {{ alert.vendor_name }}
+                  *Amount:* ${{ alert.amount | number_format(2) }}
+                  {% elif alert.type == 'discount_expiring' %}
+                  💰 *EARLY PAY DISCOUNT EXPIRING*
+                  *Vendor:* {{ alert.vendor_name }}
+                  *Bill Amount:* ${{ alert.amount | number_format(2) }}
+                  *Potential Savings:* ${{ alert.discount_amount | number_format(2) }}
+                  *Deadline:* {{ alert.discount_deadline | date('Y-m-d') }}
+                  {% endif %}
+
+        # Step 2f: Generate daily AP summary
+        - id: send_ap_digest
+          type: slack_message
+          config:
+            channel: "{{ tenant.owner_slack_channel }}"
+            message: |
+              💳 *Daily AP Summary - {{ tenant.name }}*
+              
+              *Current Cash Position:* ${{ nodes.calculate_ap_aging.outputs.cash_position | number_format(2) }}
+              
+              *Upcoming Payments:*
+              • Next 7 days: ${{ nodes.calculate_ap_aging.outputs.ap_next_7_days | number_format(2) }}
+              • Next 14 days: ${{ nodes.calculate_ap_aging.outputs.ap_next_14_days | number_format(2) }}
+              • Overdue: ${{ nodes.calculate_ap_aging.outputs.ap_overdue | number_format(2) }}
+              
+              *Cash After 7-Day AP:* ${{ nodes.calculate_ap_aging.outputs.cash_after_7_day_ap | number_format(2) }} {{ nodes.calculate_ap_aging.outputs.cash_buffer_ok ? '✅' : '⚠️' }}
+              
+              {% if nodes.calculate_ap_aging.outputs.discount_opportunities.length > 0 %}
+              *Early Payment Discounts Available:* {{ nodes.calculate_ap_aging.outputs.discount_opportunities.length }}
+              {% endif %}
+
+# ============================================================================
+# EMAIL TEMPLATES
+# ============================================================================
+email_templates:
+  ar_soft_reminder:
+    subject: "Friendly Reminder: Invoice #{{ invoice_number }} - {{ company_name }}"
+    body: |
+      Dear {{ customer_name }},
+      
+      This is a friendly reminder that Invoice #{{ invoice_number }} for ${{ amount }} was due on {{ due_date }}.
+      
+      If you've already sent payment, please disregard this message. If not, we'd appreciate your prompt attention to this matter.
+      
+      For your convenience, you can pay online at: {{ payment_link }}
+      
+      If you have any questions or concerns, please don't hesitate to reach out.
+      
+      Thank you for your business!
+      
+      {{ company_name }}
+
+  ar_friendly_reminder:
+    subject: "Payment Reminder: Invoice #{{ invoice_number }} - {{ days_overdue }} Days Past Due"
+    body: |
+      Dear {{ customer_name }},
+      
+      We hope this message finds you well. We wanted to reach out regarding Invoice #{{ invoice_number }} for ${{ amount }}, which is now {{ days_overdue }} days past due.
+      
+      We understand that oversights happen, and we're here to help if there are any issues with the invoice or if you need to discuss payment arrangements.
+      
+      Please remit payment at your earliest convenience: {{ payment_link }}
+      
+      Thank you for your attention to this matter.
+      
+      Best regards,
+      {{ company_name }}
+
+  ar_formal_reminder:
+    subject: "IMPORTANT: Outstanding Balance - Invoice #{{ invoice_number }}"
+    body: |
+      Dear {{ customer_name }},
+      
+      This is a formal notice regarding your outstanding balance of ${{ amount }} on Invoice #{{ invoice_number }}, which is now {{ days_overdue }} days past due.
+      
+      We value our business relationship and would like to resolve this matter promptly. Please remit payment within 7 days to avoid any disruption to your account status.
+      
+      Pay now: {{ payment_link }}
+      
+      If there is an issue with this invoice or you need to discuss payment options, please contact us immediately.
+      
+      Sincerely,
+      {{ company_name }}
+
+  ar_escalation:
+    subject: "URGENT: Account Requires Immediate Attention - {{ company_name }}"
+    body: |
+      Dear {{ customer_name }},
+      
+      Your account with {{ company_name }} requires immediate attention. Invoice #{{ invoice_number }} for ${{ amount }} is now {{ days_overdue }} days past due.
+      
+      To avoid potential service interruptions and additional collection actions, please remit payment within 5 business days.
+      
+      Pay immediately: {{ payment_link }}
+      
+      If you are experiencing financial difficulties, please contact us to discuss available options.
+      
+      {{ company_name }}
+
+  ar_collection_warning:
+    subject: "FINAL NOTICE: Invoice #{{ invoice_number }} - Collection Action Pending"
+    body: |
+      Dear {{ customer_name }},
+      
+      Despite previous communications, Invoice #{{ invoice_number }} for ${{ amount }} remains unpaid and is now {{ days_overdue }} days past due.
+      
+      This serves as final notice that if payment is not received within 10 business days, we may be required to refer this matter to a collection agency, which could affect your credit rating.
+      
+      We strongly prefer to resolve this matter directly. Please pay immediately: {{ payment_link }}
+      
+      Or contact us within 48 hours to discuss resolution options.
+      
+      {{ company_name }}
+
+# ============================================================================
+# ERROR HANDLING
+# ============================================================================
+error_handling:
+  retry_policy:
+    max_attempts: 3
+    backoff_multiplier: 2
+    initial_delay_seconds: 60
+
+  on_error:
+    - type: log_error
+      config:
+        table: workflow_errors
+        include_context: true
+    
+    - type: alert
+      config:
+        channel: slack
+        message: "AR/AP Followup workflow error: {{ error.message }}"
+        severity: warning
+
+  fallback:
+    - condition: "quickbooks_api_failure"
+      action: skip_tenant_continue_loop
+    
+    - condition: "email_send_failure"
+      action: log_and_queue_retry
+
+# ============================================================================
+# MONITORING
+# ============================================================================
+monitoring:
+  metrics:
+    - name: ar_reminders_sent_total
+      type: counter
+      labels: [tenant_id, reminder_type]
+    
+    - name: ar_total_overdue
+      type: gauge
+      labels: [tenant_id]
+    
+    - name: ap_cash_buffer_status
+      type: gauge
+      labels: [tenant_id]
+    
+    - name: workflow_duration_seconds
+      type: histogram
+      labels: [tenant_id]
+
+  alerts:
+    - name: high_ar_concentration
+      condition: "single_customer_ar > 0.3 * total_ar"
+      severity: warning
+      message: "Customer concentration risk: {{ customer_name }} represents >30% of AR"
+    
+    - name: critical_cash_position
+      condition: "cash_after_7_day_ap < 10000"
+      severity: critical
+      message: "Critical cash position for {{ tenant_name }}: ${{ cash_after_7_day_ap }} after AP"
