@@ -34,6 +34,14 @@ logs/
 # Docker
 docker-compose.override.yml
 
+# SSH Keys (NEVER commit these!)
+id_rsa
+id_rsa.pub
+*.pem
+*.key
+*.pub
+!*.pub.md
+
 # Database
 *.db
 *.sqlite
