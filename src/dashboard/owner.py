@@ -3,6 +3,7 @@ Owner Dashboard - "Am I okay?" view
 Streamlit application for roofing contractor owners
 """
 import os
+import sys
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
@@ -10,6 +11,11 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from supabase import create_client, Client
+
+# Add src to path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from services.qbo.client import QBOClient
 
 # Load environment
 load_dotenv()
@@ -55,9 +61,15 @@ st.markdown("""
 @st.cache_resource
 def get_supabase():
     """Get Supabase client"""
+    # Use service key for dashboard to allow full access
+    # In production, use RLS policies and anon key with proper auth
+    service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+    anon_key = os.getenv("SUPABASE_ANON_KEY", "")
+    # Prefer service key if available, fallback to anon key
+    key = service_key if service_key else anon_key
     return create_client(
         os.getenv("SUPABASE_URL", ""),
-        os.getenv("SUPABASE_ANON_KEY", "")
+        key
     )
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -188,6 +200,152 @@ def get_action_items(tenant_id: str):
     ]
 
 # ============================================================
+# QBO DATA FUNCTIONS
+# ============================================================
+
+@st.cache_resource
+def get_qbo_client(tenant_id: str):
+    """Get QBO client instance"""
+    try:
+        return QBOClient(tenant_id)
+    except Exception as e:
+        st.error(f"Error connecting to QBO: {str(e)}")
+        return None
+
+@st.cache_data(ttl=300)
+def get_qbo_cash_position(tenant_id: str):
+    """Get cash position from QBO"""
+    client = get_qbo_client(tenant_id)
+    if not client:
+        return None
+    
+    try:
+        total_cash = client.get_cash_accounts_balance()
+        
+        # Calculate AR total from invoices (only unpaid)
+        today = datetime.now().date()
+        start_date = (today - timedelta(days=365)).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        invoices = client.get_invoices(start_date, end_date)
+        # Only count invoices with outstanding balance
+        ar_total = sum(inv.get("balance", 0) for inv in invoices if inv.get("balance", 0) > 0)
+        
+        # Calculate AP total from bills (only unpaid)
+        bills = client.get_bills(start_date, end_date)
+        # Only count bills with outstanding balance
+        ap_total = sum(bill.get("balance", 0) for bill in bills if bill.get("balance", 0) > 0)
+        
+        # Calculate week-over-week change (simplified - would need historical data)
+        # For now, just return current balance
+        return {
+            "total_cash": total_cash,
+            "change_wow": 0.0,  # TODO: Calculate from historical data
+            "runway_weeks": 12,  # TODO: Calculate from expenses
+            "ar_total": ar_total,
+            "ap_total": ap_total
+        }
+    except Exception as e:
+        st.error(f"Error fetching cash position: {str(e)}")
+        return None
+
+@st.cache_data(ttl=300)
+def get_qbo_revenue_mtd(tenant_id: str):
+    """Get month-to-date revenue from QBO"""
+    client = get_qbo_client(tenant_id)
+    if not client:
+        return None
+    
+    try:
+        today = datetime.now()
+        month_start = today.replace(day=1).strftime("%Y-%m-%d")
+        revenue_data = client.get_revenue_mtd(month_start)
+        
+        return {
+            "mtd": revenue_data.get("mtd", 0),
+            "target": revenue_data.get("target", 100000),
+            "progress": revenue_data.get("mtd", 0) / revenue_data.get("target", 100000) if revenue_data.get("target", 0) > 0 else 0
+        }
+    except Exception as e:
+        st.error(f"Error fetching revenue: {str(e)}")
+        return None
+
+@st.cache_data(ttl=300)
+def get_qbo_ar_aging(tenant_id: str):
+    """Get AR aging from QBO invoices"""
+    client = get_qbo_client(tenant_id)
+    if not client:
+        return None
+    
+    try:
+        # Get invoices from last year
+        today = datetime.now().date()
+        start_date = (today - timedelta(days=365)).strftime("%Y-%m-%d")
+        end_date = today.strftime("%Y-%m-%d")
+        
+        invoices = client.get_invoices(start_date, end_date)
+        
+        buckets = {"Current": 0, "31-60": 0, "61-90": 0, "90+": 0}
+        
+        for inv in invoices:
+            txn_date_str = inv.get("txn_date")
+            if not txn_date_str:
+                continue
+            
+            try:
+                txn_date = datetime.strptime(txn_date_str, "%Y-%m-%d").date()
+                days = (today - txn_date).days
+                balance = inv.get("balance", 0)
+                
+                if days <= 30:
+                    buckets["Current"] += balance
+                elif days <= 60:
+                    buckets["31-60"] += balance
+                elif days <= 90:
+                    buckets["61-90"] += balance
+                else:
+                    buckets["90+"] += balance
+            except (ValueError, TypeError):
+                continue
+        
+        return buckets
+    except Exception as e:
+        st.error(f"Error fetching AR aging: {str(e)}")
+        return None
+
+@st.cache_data(ttl=300)
+def get_qbo_forecast(tenant_id: str):
+    """Get cash forecast (simplified from QBO data)"""
+    client = get_qbo_client(tenant_id)
+    if not client:
+        return None
+    
+    try:
+        # Get current cash balance
+        current_cash = client.get_cash_accounts_balance()
+        
+        # Simple forecast - in production this would use actual forecast logic
+        forecast = []
+        for i in range(13):
+            week_start = datetime.now() + timedelta(weeks=i)
+            # Simplified projection
+            pessimistic = current_cash * (0.95 ** i)
+            baseline = current_cash * (1.02 ** i)
+            optimistic = current_cash * (1.08 ** i)
+            
+            forecast.append({
+                "week_number": i,
+                "week_start_date": week_start.strftime("%Y-%m-%d"),
+                "pessimistic_cash": pessimistic,
+                "ending_cash": baseline,
+                "optimistic_cash": optimistic
+            })
+        
+        return forecast
+    except Exception as e:
+        st.error(f"Error generating forecast: {str(e)}")
+        return None
+
+# ============================================================
 # MOCK DATA (remove once connected to real DB)
 # ============================================================
 
@@ -230,24 +388,55 @@ def get_mock_data():
 # ============================================================
 
 def main():
-    # For demo, use mock data
-    # In production, replace with real tenant_id from auth
-    USE_MOCK = True
-    tenant_id = "demo"
+    # Get tenant_id - in production, this would come from auth
+    # For now, use a default or check for tenant in Supabase
+    tenant_id = os.getenv("TENANT_ID", "demo")
     
-    if USE_MOCK:
+    # Check if QBO is connected
+    use_qbo = True
+    try:
+        qbo_client = get_qbo_client(tenant_id)
+        if qbo_client is None:
+            use_qbo = False
+            st.warning("⚠️ QBO not connected. Using mock data. Please connect QBO in settings.")
+    except Exception as e:
+        use_qbo = False
+        st.warning(f"⚠️ QBO connection error: {str(e)}. Using mock data.")
+    
+    if use_qbo:
+        # Fetch from QBO
+        cash = get_qbo_cash_position(tenant_id)
+        revenue = get_qbo_revenue_mtd(tenant_id)
+        ar_aging = get_qbo_ar_aging(tenant_id)
+        forecast = get_qbo_forecast(tenant_id)
+        
+        # For now, use mock jobs data (QBO doesn't have job costing by default)
+        # Wrap in try-except to handle Supabase errors gracefully
+        try:
+            jobs_data = get_jobs_profitability(tenant_id)
+            jobs = jobs_data if jobs_data else get_mock_data()["jobs"]
+        except Exception as e:
+            # If Supabase query fails (e.g., table doesn't exist or no permissions), use mock data
+            jobs = get_mock_data()["jobs"]
+            if "jobs" not in str(e).lower():  # Only show error if it's not about missing jobs table
+                st.warning(f"Could not fetch jobs from database: {str(e)[:100]}")
+        
+        # Fallback to mock if any data is missing
+        if not cash or not revenue or not ar_aging:
+            st.warning("⚠️ Some QBO data is missing. Using mock data for missing values.")
+            mock_data = get_mock_data()
+            cash = cash or mock_data["cash_position"]
+            revenue = revenue or mock_data["revenue"]
+            ar_aging = ar_aging or mock_data["ar_aging"]
+            forecast = forecast or mock_data["forecast"]
+    else:
+        # Use mock data
         data = get_mock_data()
         cash = data["cash_position"]
         revenue = data["revenue"]
         ar_aging = data["ar_aging"]
         forecast = data["forecast"]
         jobs = data["jobs"]
-    else:
-        cash = get_cash_position(tenant_id) or {}
-        revenue = get_revenue_mtd(tenant_id)
-        ar_aging = get_ar_aging(tenant_id)
-        forecast = get_forecast(tenant_id)
-        jobs = get_jobs_profitability(tenant_id)
     
     # Header
     st.title("🏠 Owner Dashboard")

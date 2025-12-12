@@ -3,7 +3,7 @@ Roofing Books CFO - API Server
 FastAPI application for bookkeeping automation
 """
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -126,18 +126,22 @@ async def qbo_callback(code: str, state: str, realmId: str):
     
     tokens = response.json()
     
+    # Calculate token expiration
+    expires_in = tokens.get("expires_in", 3600)  # Default to 1 hour if not provided
+    token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    
     # Store tokens in Supabase
     result = supabase.table("tenant_integrations").upsert({
         "tenant_id": tenant_id,
         "provider": "quickbooks",
         "access_token": tokens.get("access_token"),
         "refresh_token": tokens.get("refresh_token"),
-        "token_expires_at": datetime.utcnow().isoformat(),  # TODO: Calculate properly
+        "token_expires_at": token_expires_at.isoformat(),
         "realm_id": realmId,
         "is_active": True,
         "metadata": {
             "token_type": tokens.get("token_type"),
-            "expires_in": tokens.get("expires_in")
+            "expires_in": expires_in
         }
     }).execute()
     
@@ -173,27 +177,68 @@ async def list_transactions(
     return {"transactions": result.data, "count": len(result.data)}
 
 @app.post("/api/transactions/{transaction_id}/classify")
-async def classify_transaction(transaction_id: str, account_id: str, job_id: str = None):
-    """Manually classify a transaction"""
-    update_data = {
-        "classification_status": "manual_classified",
-        "classified_by": "user",
-        "classified_at": datetime.utcnow().isoformat()
-    }
+async def classify_transaction(transaction_id: str, account_id: str = None, job_id: str = None):
+    """
+    Classify a transaction
     
-    # Update transaction
-    result = supabase.table("transactions")\
-        .update(update_data)\
+    If account_id is provided, manually classify.
+    If not provided, use AI classification agent.
+    """
+    from services.qbo.classification_workflow import ClassificationWorkflow
+    
+    # Get tenant_id from transaction
+    txn_result = supabase.table("transactions")\
+        .select("tenant_id")\
         .eq("id", transaction_id)\
+        .limit(1)\
         .execute()
     
-    # Update transaction line with account
-    supabase.table("transaction_lines")\
-        .update({"account_id": account_id, "job_id": job_id})\
-        .eq("transaction_id", transaction_id)\
-        .execute()
+    if not txn_result.data:
+        raise HTTPException(404, "Transaction not found")
     
-    return {"status": "classified", "transaction_id": transaction_id}
+    tenant_id = txn_result.data[0]["tenant_id"]
+    
+    if account_id:
+        # Manual classification
+        update_data = {
+            "classification_status": "manual_classified",
+            "classified_by": "user",
+            "classified_at": datetime.utcnow().isoformat()
+        }
+        
+        supabase.table("transactions")\
+            .update(update_data)\
+            .eq("id", transaction_id)\
+            .execute()
+        
+        # Update or create transaction line
+        existing_line = supabase.table("transaction_lines")\
+            .select("id")\
+            .eq("transaction_id", transaction_id)\
+            .limit(1)\
+            .execute()
+        
+        if existing_line.data:
+            supabase.table("transaction_lines")\
+                .update({"account_id": account_id, "job_id": job_id})\
+                .eq("id", existing_line.data[0]["id"])\
+                .execute()
+        else:
+            supabase.table("transaction_lines")\
+                .insert({
+                    "transaction_id": transaction_id,
+                    "account_id": account_id,
+                    "job_id": job_id,
+                    "line_number": 1
+                })\
+                .execute()
+        
+        return {"status": "classified", "transaction_id": transaction_id, "method": "manual"}
+    else:
+        # AI classification
+        workflow = ClassificationWorkflow(tenant_id)
+        result = workflow.classify_transaction_by_id(transaction_id)
+        return result
 
 # ============================================================
 # JOBS
@@ -341,6 +386,87 @@ async def get_ar_aging(tenant_id: str):
         "total": sum(buckets.values()),
         "invoices": sorted(invoices, key=lambda x: x["days_outstanding"], reverse=True)
     }
+
+# ============================================================
+# QBO SYNC
+# ============================================================
+
+@app.post("/api/sync/qbo")
+async def sync_qbo_transactions(
+    tenant_id: str,
+    start_date: str = None,
+    end_date: str = None,
+    incremental: bool = False,
+    auto_classify: bool = False
+):
+    """
+    Sync transactions from QuickBooks to Supabase
+    
+    Args:
+        tenant_id: Tenant UUID
+        start_date: Start date in YYYY-MM-DD format (optional, defaults to 30 days ago)
+        end_date: End date in YYYY-MM-DD format (optional, defaults to today)
+        incremental: If True, only sync since last sync (ignores start_date/end_date)
+        auto_classify: If True, automatically classify synced transactions
+    
+    Returns:
+        Sync results with count and status
+    """
+    from services.qbo.sync import QBOSyncService
+    from services.qbo.classification_workflow import ClassificationWorkflow
+    
+    try:
+        sync_service = QBOSyncService(tenant_id)
+        
+        if incremental:
+            sync_result = sync_service.sync_incremental()
+        else:
+            sync_result = sync_service.sync_transactions(start_date, end_date)
+        
+        # Auto-classify if requested and sync was successful
+        classification_result = None
+        if auto_classify and sync_result.get("synced_count", 0) > 0:
+            workflow = ClassificationWorkflow(tenant_id)
+            classification_result = workflow.classify_unclassified_transactions(limit=100)
+        
+        return {
+            "status": "success",
+            "sync_result": sync_result,
+            "classification_result": classification_result
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"Sync failed: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Sync error: {str(e)}")
+
+@app.post("/api/transactions/classify/batch")
+async def classify_transactions_batch(
+    tenant_id: str,
+    limit: int = 50,
+    transaction_types: list[str] = None
+):
+    """
+    Classify unclassified transactions in batch
+    
+    Args:
+        tenant_id: Tenant UUID
+        limit: Maximum number of transactions to classify
+        transaction_types: Optional list of transaction types to filter
+    
+    Returns:
+        Classification results
+    """
+    from services.qbo.classification_workflow import ClassificationWorkflow
+    
+    try:
+        workflow = ClassificationWorkflow(tenant_id)
+        result = workflow.classify_unclassified_transactions(
+            limit=limit,
+            transaction_types=transaction_types
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Classification error: {str(e)}")
 
 # ============================================================
 # RUN SERVER
