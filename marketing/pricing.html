@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing | CrewCFO - AI Bookkeeping for Roofing Contractors</title>
+    <meta name="description" content="Simple, transparent pricing. $299/month for unlimited everything. No setup fees, no hidden costs.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#0a0f1a', 900: '#0f172a', 800: '#1e293b', 700: '#334155', 600: '#475569', 500: '#64748b', 400: '#94a3b8', 300: '#cbd5e1' },
+                        emerald: { 500: '#10b981', 400: '#34d399', 300: '#6ee7b7' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html { scroll-behavior: smooth; }
+        .gradient-text { background: linear-gradient(135deg, #10b981 0%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+    <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet">
+    <script src="https://assets.calendly.com/assets/external/widget.js" type="text/javascript" async></script>
+</head>
+<body class="bg-slate-950 text-white">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-slate-950/90 backdrop-blur-sm z-50 border-b border-slate-800">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="index.html" class="flex items-center gap-2">
+                <span class="text-2xl">🏠</span>
+                <span class="text-xl font-bold">CrewCFO</span>
+            </a>
+            <div class="hidden md:flex gap-8 text-sm text-slate-400">
+                <a href="index.html#features" class="hover:text-white transition">Features</a>
+                <a href="pricing.html" class="text-white">Pricing</a>
+                <a href="about.html" class="hover:text-white transition">About</a>
+            </div>
+            <div class="flex items-center">
+                <a href="#" onclick="goToDashboard()" class="text-slate-400 hover:text-white transition mr-4">Login</a>
+                <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-lg transition">
+                    Book Demo
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="pt-32 pb-12 px-6">
+        <div class="max-w-4xl mx-auto text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4">
+                Simple Pricing. <span class="gradient-text">Unlimited Everything.</span>
+            </h1>
+            <p class="text-xl text-slate-400 max-w-2xl mx-auto">
+                One plan. One price. No surprises. No per-transaction fees. No user limits.
+            </p>
+        </div>
+    </section>
+
+    <!-- Main Pricing Card -->
+    <section class="py-12 px-6">
+        <div class="max-w-lg mx-auto">
+            <div class="bg-slate-900 rounded-2xl p-8 border-2 border-emerald-500 relative">
+                <div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-black text-sm font-semibold px-4 py-1 rounded-full">
+                    MOST POPULAR
+                </div>
+                
+                <div class="text-center mb-8">
+                    <div class="text-emerald-400 font-semibold mb-2">COMPLETE</div>
+                    <div class="flex items-baseline justify-center gap-2 mb-2">
+                        <span class="text-6xl font-bold">$299</span>
+                        <span class="text-slate-400 text-xl">/month</span>
+                    </div>
+                    <div class="text-slate-400">
+                        or <span class="text-white font-semibold">$249/mo</span> billed annually <span class="text-emerald-400">(save $600)</span>
+                    </div>
+                </div>
+
+                <div class="space-y-4 mb-8">
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span><strong>Unlimited</strong> transactions</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span><strong>Unlimited</strong> jobs & projects</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span><strong>Unlimited</strong> users</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>AI auto-classification (70%+ accuracy)</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>Real-time job costing & margins</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>13-week cash flow forecast</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>Weekly CFO brief in your inbox</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>Automated AR reminders</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>QuickBooks Online sync (2-way)</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>Mobile-friendly dashboard</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>Email & chat support</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-emerald-400 text-xl">✓</span>
+                        <span>1-on-1 onboarding call included</span>
+                    </div>
+                </div>
+
+                <button onclick="openCalendly()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-4 rounded-lg text-lg transition mb-4">
+                    Start 14-Day Free Trial
+                </button>
+                <p class="text-center text-slate-500 text-sm">
+                    No credit card required. Cancel anytime.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison -->
+    <section class="py-16 px-6">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-2xl font-bold text-center mb-8">How We Compare</h2>
+            <div class="grid md:grid-cols-4 gap-4">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-slate-400 text-sm mb-2">DIY Bookkeeping</div>
+                    <div class="text-2xl font-bold mb-1">$0</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm text-slate-400 space-y-2">
+                        <li class="text-red-400">✗ 10+ hours/week of your time</li>
+                        <li class="text-red-400">✗ No forecasting</li>
+                        <li class="text-red-400">✗ Error-prone</li>
+                        <li class="text-red-400">✗ No job costing</li>
+                    </ul>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-slate-400 text-sm mb-2">Part-time Bookkeeper</div>
+                    <div class="text-2xl font-bold mb-1">$500-1,500</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm text-slate-400 space-y-2">
+                        <li class="text-amber-400">~ Basic data entry</li>
+                        <li class="text-red-400">✗ No forecasting</li>
+                        <li class="text-red-400">✗ Doesn't know roofing</li>
+                        <li class="text-red-400">✗ Week-old reports</li>
+                    </ul>
+                </div>
+                <div class="bg-emerald-500/10 rounded-xl p-6 border-2 border-emerald-500">
+                    <div class="text-emerald-400 text-sm mb-2 font-semibold">CrewCFO</div>
+                    <div class="text-2xl font-bold mb-1">$299</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm space-y-2">
+                        <li class="text-emerald-400">✓ AI automation</li>
+                        <li class="text-emerald-400">✓ 13-week forecast</li>
+                        <li class="text-emerald-400">✓ Built for roofing</li>
+                        <li class="text-emerald-400">✓ Real-time dashboard</li>
+                    </ul>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-slate-400 text-sm mb-2">Fractional CFO</div>
+                    <div class="text-2xl font-bold mb-1">$2,000-5,000</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm text-slate-400 space-y-2">
+                        <li class="text-emerald-400">✓ Strategic advice</li>
+                        <li class="text-emerald-400">✓ Forecasting</li>
+                        <li class="text-amber-400">~ Limited availability</li>
+                        <li class="text-red-400">✗ 10x the cost</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="py-16 px-6 bg-slate-900/50">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl font-bold text-center mb-12">Pricing FAQ</h2>
+            <div class="space-y-4">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Are there any setup fees?</h3>
+                    <p class="text-slate-400">No. Zero setup fees. Your subscription includes a 1-on-1 onboarding call where we help you connect QuickBooks and configure everything.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">What if I have multiple companies or entities?</h3>
+                    <p class="text-slate-400">Each QuickBooks company is a separate subscription. If you run 2 roofing companies, you'd need 2 CrewCFO subscriptions. Contact us for multi-company discounts.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Can I cancel anytime?</h3>
+                    <p class="text-slate-400">Yes. No contracts, no cancellation fees. If you're on annual billing, we'll refund the unused portion.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">What's included in the free trial?</h3>
+                    <p class="text-slate-400">Everything. Full access to all features for 14 days. Connect your QuickBooks, see your real data, try the forecasting. No credit card required to start.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Do you offer discounts for annual billing?</h3>
+                    <p class="text-slate-400">Yes! Pay annually and get 2 months free ($249/mo instead of $299/mo). That's $600 saved per year.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Money Back Guarantee -->
+    <section class="py-16 px-6">
+        <div class="max-w-2xl mx-auto text-center">
+            <div class="text-5xl mb-4">🛡️</div>
+            <h2 class="text-2xl font-bold mb-4">30-Day Money-Back Guarantee</h2>
+            <p class="text-slate-400 mb-8">
+                If you're not seeing clearer finances within your first 30 days, we'll refund every penny. No questions asked. We're that confident you'll love it.
+            </p>
+            <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-4 rounded-lg text-lg transition">
+                Start Your Free Trial
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 px-6 border-t border-slate-800">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-center text-sm text-slate-500">
+                <div class="flex items-center gap-2 mb-4 md:mb-0">
+                    <span class="text-xl">🏠</span>
+                    <span class="font-semibold text-white">CrewCFO</span>
+                </div>
+                <div class="flex gap-6">
+                    <a href="index.html" class="hover:text-white">Home</a>
+                    <a href="pricing.html" class="hover:text-white">Pricing</a>
+                    <a href="about.html" class="hover:text-white">About</a>
+                    <a href="#" class="hover:text-white">Privacy</a>
+                    <a href="#" class="hover:text-white">Terms</a>
+                </div>
+            </div>
+            <div class="text-center text-slate-600 text-sm mt-8">
+                © 2024 CrewCFO. Built for roofers, by people who get it.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const CONFIG = {
+            calendlyUrl: 'https://calendly.com/YOUR_CALENDLY_LINK',
+            dashboardUrl: 'http://localhost:8503',
+        };
+        function openCalendly() { Calendly.initPopupWidget({url: CONFIG.calendlyUrl}); return false; }
+        function goToDashboard() { window.location.href = CONFIG.dashboardUrl; }
+    </script>
+</body>
+</html>

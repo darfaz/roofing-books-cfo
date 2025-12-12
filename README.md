@@ -4,6 +4,33 @@ AI-powered bookkeeping and fractional CFO for roofing contractors.
 
 ## Quick Start
 
+### Option 1: Docker (Recommended)
+
+```bash
+# 1. Clone repo
+git clone https://github.com/YOUR_USERNAME/roofing-books-cfo.git
+cd roofing-books-cfo
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your credentials (see below)
+
+# 3. Set up database
+# Copy contents of supabase/schema.sql to Supabase SQL editor and run
+
+# 4. Start with Docker
+docker-compose up
+
+# Access:
+# - Dashboard: http://localhost:8503
+# - API: http://localhost:8000
+# - API Docs: http://localhost:8000/docs
+```
+
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for detailed Docker instructions.
+
+### Option 2: Local Development
+
 ```bash
 # 1. Clone repo
 git clone https://github.com/YOUR_USERNAME/roofing-books-cfo.git
@@ -25,10 +52,7 @@ cp .env.example .env
 python src/main.py
 
 # 6. Start the dashboard (separate terminal)
-streamlit run src/dashboard/owner.py
-
-# OR use Docker (recommended):
-docker-compose up
+streamlit run src/dashboard/owner.py --server.port 8503
 ```
 
 ## Required Credentials
@@ -62,7 +86,11 @@ roofing-books-cfo/
 │   ├── system-design/          # Technical specs
 │   └── automations/            # Workflow definitions
 ├── .env.example                # Environment template
-├── requirements.txt            # Python dependencies
+├── requirements.txt            # Core Python dependencies (~1.5GB images)
+├── requirements-full.txt       # Full deps with OCR (~3.7GB images)
+├── Dockerfile                  # Development Docker image
+├── Dockerfile.prod             # Production Docker image
+├── docker-compose.yml          # Docker Compose config
 └── README.md                   # This file
 ```
 
@@ -96,16 +124,6 @@ streamlit run src/dashboard/owner.py --server.port 8503
 pytest tests/
 ```
 
-### Database migrations
-
-Currently using raw SQL. Run new migrations in Supabase SQL editor.
-
-### Adding a new service
-
-1. Create folder in `src/services/`
-2. Add router to `src/main.py`
-3. Add tests in `tests/`
-
 ## Key Endpoints
 
 | Endpoint | Method | Description |
@@ -113,8 +131,10 @@ Currently using raw SQL. Run new migrations in Supabase SQL editor.
 | `/health` | GET | Health check |
 | `/auth/qbo/connect` | GET | Start QBO OAuth |
 | `/auth/qbo/callback` | GET | QBO OAuth callback |
+| `/api/sync/qbo` | POST | Sync transactions from QBO |
 | `/api/transactions` | GET | List transactions |
-| `/api/transactions/classify` | POST | Classify transaction |
+| `/api/transactions/{id}/classify` | POST | Classify transaction |
+| `/api/transactions/classify/batch` | POST | Batch classify transactions |
 | `/api/jobs` | GET | List jobs |
 | `/api/cash/position` | GET | Current cash position |
 | `/api/cash/forecast` | GET | 13-week forecast |
@@ -127,6 +147,13 @@ Currently using raw SQL. Run new migrations in Supabase SQL editor.
 | `QBO_ENVIRONMENT` | sandbox | production |
 | `LOG_LEVEL` | DEBUG | INFO |
 
+## Docker Image Sizes
+
+- **Core** (`requirements.txt`): ~1.46GB - Recommended for most use cases
+- **Full** (`requirements-full.txt`): ~3.7GB - Only needed when OCR is implemented
+
+See [DOCKER_OPTIMIZATION.md](DOCKER_OPTIMIZATION.md) for details.
+
 ## Documentation
 
 Full specifications in `/docs`:
@@ -134,6 +161,13 @@ Full specifications in `/docs`:
 - **System Design**: Data models, agents
 - **Automations**: Workflow YAML specs
 - **Implementation Guide**: OSS tool mapping
+
+Additional guides:
+- [DOCKER_SETUP.md](DOCKER_SETUP.md) - Docker usage guide
+- [DOCKER_OPTIMIZATION.md](DOCKER_OPTIMIZATION.md) - Image size optimization
+- [TESTING_SETUP.md](TESTING_SETUP.md) - QBO testing setup
+- [SYNC_USAGE.md](SYNC_USAGE.md) - Transaction sync guide
+- [NEXT_STEPS_SUMMARY.md](NEXT_STEPS_SUMMARY.md) - Implementation status
 
 ## Contributing
 

@@ -1,0 +1,20 @@
+# Roofing CFO MVP - Full Dependencies (Including OCR/ML)
+# Use this only when OCR functionality is implemented
+# Install: pip install -r requirements-full.txt
+# Note: This increases Docker image size to ~3.7GB
+
+# Include core requirements
+-r requirements.txt
+
+# OCR (InvoiceNet dependencies) - Only when OCR is implemented
+# WARNING: TensorFlow adds ~2-3GB to image size
+tensorflow>=2.15.0
+opencv-python>=4.9.0
+Pillow>=10.0.0
+
+# Double-Entry Accounting (if needed)
+python-accounting>=1.0.0
+
+# Tax (Avalara)
+# Note: Install via `pip install Avalara` separately
+

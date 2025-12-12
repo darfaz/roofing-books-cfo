@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About | CrewCFO - AI Bookkeeping for Roofing Contractors</title>
+    <meta name="description" content="We built CrewCFO because roofing contractors deserve better than spreadsheets and guesswork.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 950: '#0a0f1a', 900: '#0f172a', 800: '#1e293b', 700: '#334155', 600: '#475569', 500: '#64748b', 400: '#94a3b8', 300: '#cbd5e1' },
+                        emerald: { 500: '#10b981', 400: '#34d399', 300: '#6ee7b7' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html { scroll-behavior: smooth; }
+        .gradient-text { background: linear-gradient(135deg, #10b981 0%, #34d399 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    </style>
+    <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet">
+    <script src="https://assets.calendly.com/assets/external/widget.js" type="text/javascript" async></script>
+</head>
+<body class="bg-slate-950 text-white">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-slate-950/90 backdrop-blur-sm z-50 border-b border-slate-800">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+            <a href="index.html" class="flex items-center gap-2">
+                <span class="text-2xl">🏠</span>
+                <span class="text-xl font-bold">CrewCFO</span>
+            </a>
+            <div class="hidden md:flex gap-8 text-sm text-slate-400">
+                <a href="index.html#features" class="hover:text-white transition">Features</a>
+                <a href="pricing.html" class="hover:text-white transition">Pricing</a>
+                <a href="about.html" class="text-white">About</a>
+            </div>
+            <div class="flex items-center">
+                <a href="#" onclick="goToDashboard()" class="text-slate-400 hover:text-white transition mr-4">Login</a>
+                <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-lg transition">
+                    Book Demo
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="pt-32 pb-16 px-6">
+        <div class="max-w-4xl mx-auto text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-6">
+                Built for Roofers, <span class="gradient-text">By People Who Get It</span>
+            </h1>
+            <p class="text-xl text-slate-400 max-w-2xl mx-auto">
+                We started CrewCFO because roofing contractors deserve financial clarity—not spreadsheet nightmares.
+            </p>
+        </div>
+    </section>
+
+    <!-- Our Story -->
+    <section class="py-16 px-6">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl font-bold mb-6">Our Story</h2>
+            <div class="prose prose-invert prose-lg text-slate-300 space-y-6">
+                <p>
+                    Every roofing contractor we've met has the same story: You're great at roofing. You built your business from nothing. You've got crews, trucks, and a reputation for quality work.
+                </p>
+                <p>
+                    But the financial side? It's chaos. Receipts stuffed in truck consoles. QuickBooks that nobody really understands. That sinking feeling when you finish a big job but somehow still can't make payroll.
+                </p>
+                <p>
+                    We saw roofing company owners spending their Sunday nights doing bookkeeping instead of being with their families. We saw profitable companies nearly go under because they couldn't see a cash crunch coming. We saw contractors charging too little because they didn't actually know their job costs.
+                </p>
+                <p class="text-white font-medium">
+                    So we built CrewCFO.
+                </p>
+                <p>
+                    We combined AI that actually understands roofing transactions with the kind of financial insights that used to require a $3,000/month CFO. All for less than what most contractors spend on coffee each month.
+                </p>
+                <p>
+                    Our mission is simple: <span class="text-emerald-400 font-semibold">Give every roofing contractor the financial clarity to grow with confidence.</span>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Values -->
+    <section class="py-16 px-6 bg-slate-900/50">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-2xl font-bold text-center mb-12">What We Believe</h2>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <div class="text-4xl mb-4">🎯</div>
+                    <h3 class="text-xl font-semibold mb-2">Vertical Focus</h3>
+                    <p class="text-slate-400">Generic accounting software doesn't cut it for trades. We built everything specifically for roofing contractors—job costing, seasonality, insurance claims, all of it.</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl mb-4">⚡</div>
+                    <h3 class="text-xl font-semibold mb-2">Speed Over Perfection</h3>
+                    <p class="text-slate-400">You don't need penny-perfect books every day. You need to know if you're okay. Our AI gets you 90% of the way instantly—you handle the exceptions.</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl mb-4">🔮</div>
+                    <h3 class="text-xl font-semibold mb-2">Forward-Looking</h3>
+                    <p class="text-slate-400">Most bookkeeping tells you what happened last month. We show you what's coming next quarter. That's the difference between surviving and thriving.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why Roofing -->
+    <section class="py-16 px-6">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl font-bold mb-6">Why Roofing?</h2>
+            <div class="space-y-6 text-slate-300">
+                <p>
+                    Roofing is one of the most financially complex trades. You've got:
+                </p>
+                <ul class="space-y-3 ml-6">
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Massive seasonality</strong> — Storm season can 10x your revenue, then winter slows to a crawl</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Complex job costing</strong> — Materials, labor, subs, dump fees, permits... tracking it all per job is a nightmare</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Cash flow chaos</strong> — You front materials, wait 30-60 days for payment, and hope your line of credit holds</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Insurance complexity</strong> — Supplement negotiations, depreciation recovery, payment delays</span>
+                    </li>
+                </ul>
+                <p>
+                    Generic bookkeeping software wasn't built for this. We were.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="py-16 px-6 bg-slate-900/50">
+        <div class="max-w-4xl mx-auto">
+            <div class="grid md:grid-cols-4 gap-8 text-center">
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">70%+</div>
+                    <div class="text-slate-400">Transactions auto-classified</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">11 days</div>
+                    <div class="text-slate-400">Faster AR collection</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">5 hrs</div>
+                    <div class="text-slate-400">Saved per week on books</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">13 weeks</div>
+                    <div class="text-slate-400">Cash flow visibility</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact -->
+    <section class="py-16 px-6">
+        <div class="max-w-2xl mx-auto text-center">
+            <h2 class="text-2xl font-bold mb-4">Get In Touch</h2>
+            <p class="text-slate-400 mb-8">
+                Questions? Ideas? Just want to talk roofing business? We're here.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="mailto:hello@crewcfo.com" class="border border-slate-600 hover:border-slate-500 text-white font-semibold px-8 py-4 rounded-lg transition">
+                    hello@crewcfo.com
+                </a>
+                <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-4 rounded-lg transition">
+                    Book a Call
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="py-16 px-6 bg-gradient-to-b from-slate-900/50 to-emerald-950/30">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-3xl font-bold mb-4">Ready to See Your Numbers Clearly?</h2>
+            <p class="text-slate-400 mb-8">
+                Start your free 14-day trial. No credit card required.
+            </p>
+            <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-4 rounded-lg text-lg transition">
+                Book Your Free Demo
+            </button>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 px-6 border-t border-slate-800">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-center text-sm text-slate-500">
+                <div class="flex items-center gap-2 mb-4 md:mb-0">
+                    <span class="text-xl">🏠</span>
+                    <span class="font-semibold text-white">CrewCFO</span>
+                </div>
+                <div class="flex gap-6">
+                    <a href="index.html" class="hover:text-white">Home</a>
+                    <a href="pricing.html" class="hover:text-white">Pricing</a>
+                    <a href="about.html" class="hover:text-white">About</a>
+                    <a href="#" class="hover:text-white">Privacy</a>
+                    <a href="#" class="hover:text-white">Terms</a>
+                </div>
+            </div>
+            <div class="text-center text-slate-600 text-sm mt-8">
+                © 2024 CrewCFO. Built for roofers, by people who get it.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const CONFIG = {
+            calendlyUrl: 'https://calendly.com/YOUR_CALENDLY_LINK',
+            dashboardUrl: 'http://localhost:8503',
+        };
+        function openCalendly() { Calendly.initPopupWidget({url: CONFIG.calendlyUrl}); return false; }
+        function goToDashboard() { window.location.href = CONFIG.dashboardUrl; }
+    </script>
+</body>
+</html>

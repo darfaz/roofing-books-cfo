@@ -1,20 +1,19 @@
-# Roofing CFO MVP - Python Dependencies
+# Roofing CFO MVP - Core Dependencies (Minimal)
+# For Docker builds, this reduces image size from ~3.7GB to ~500-800MB
 # Install: pip install -r requirements.txt
 
-# QuickBooks Integration
-python-quickbooks>=0.9.0
-
-# Double-Entry Accounting
-python-accounting>=1.0.0
-
-# LLM / AI
-langchain>=0.1.0
-langchain-anthropic>=0.1.0
-langchain-openai>=0.0.5
+# API Framework
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+pydantic>=2.5.0
 
 # Dashboard
 streamlit>=1.30.0
 plotly>=5.18.0
+
+# QuickBooks Integration
+python-quickbooks>=0.9.0
 
 # Database
 supabase>=2.0.0
@@ -23,23 +22,14 @@ supabase>=2.0.0
 pandas>=2.0.0
 numpy>=1.24.0
 
-# API Framework
-fastapi>=0.109.0
-uvicorn>=0.27.0
-httpx>=0.26.0
-pydantic>=2.5.0
-
 # Utilities
 python-dotenv>=1.0.0
 python-dateutil>=2.8.0
 
-# OCR (InvoiceNet dependencies)
-tensorflow>=2.15.0
-opencv-python>=4.9.0
-Pillow>=10.0.0
-
-# Tax (Avalara)
-# Note: Install via `pip install Avalara` separately
+# LLM / AI
+langchain>=0.1.0
+langchain-anthropic>=0.1.0
+langchain-openai>=0.0.5
 
 # Testing
 pytest>=7.4.0

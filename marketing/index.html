@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrewCFO | AI Bookkeeping & CFO for Roofing Contractors</title>
+    <meta name="description" content="Stop drowning in receipts. CrewCFO automates bookkeeping, tracks job costs, and forecasts cash flow—built specifically for roofing contractors.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            950: '#0a0f1a',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            600: '#475569',
+                            500: '#64748b',
+                            400: '#94a3b8',
+                            300: '#cbd5e1',
+                        },
+                        emerald: {
+                            500: '#10b981',
+                            400: '#34d399',
+                            300: '#6ee7b7',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html { scroll-behavior: smooth; }
+        .gradient-text {
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+    <!-- Calendly -->
+    <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet">
+    <script src="https://assets.calendly.com/assets/external/widget.js" type="text/javascript" async></script>
+</head>
+<body class="bg-slate-950 text-white">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-slate-950/90 backdrop-blur-sm z-50 border-b border-slate-800">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">🏠</span>
+                <span class="text-xl font-bold">CrewCFO</span>
+            </div>
+            <div class="hidden md:flex gap-8 text-sm text-slate-400">
+                <a href="#features" class="hover:text-white transition">Features</a>
+                <a href="#pricing" class="hover:text-white transition">Pricing</a>
+                <a href="#testimonials" class="hover:text-white transition">Testimonials</a>
+                <a href="#faq" class="hover:text-white transition">FAQ</a>
+            </div>
+            <a href="#" onclick="goToDashboard()" class="text-slate-400 hover:text-white transition mr-4">Login</a>
+            <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-lg transition">
+                Book Demo
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="pt-32 pb-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <div>
+                    <div class="inline-block bg-emerald-500/10 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-6">
+                        Built for Roofing Contractors
+                    </div>
+                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight mb-6">
+                        Stop Guessing.<br>
+                        <span class="gradient-text">Know Your Cash.</span>
+                    </h1>
+                    <p class="text-xl text-slate-400 mb-8 leading-relaxed">
+                        CrewCFO is the AI-powered finance platform built for roofing contractors. 
+                        Automated bookkeeping, job costing, and cash forecasting—so you can focus on roofs, not receipts.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-4 rounded-lg text-lg transition">
+                            Book a Free Demo
+                        </button>
+                        <a href="#features" class="border border-slate-600 hover:border-slate-500 text-white font-semibold px-8 py-4 rounded-lg text-lg transition text-center">
+                            See How It Works →
+                        </a>
+                    </div>
+                    <div class="flex flex-wrap gap-6 mt-8 text-sm text-slate-500">
+                        <span class="flex items-center gap-2">
+                            <span class="text-emerald-400">✓</span> 14-day free trial
+                        </span>
+                        <span class="flex items-center gap-2">
+                            <span class="text-emerald-400">✓</span> No credit card
+                        </span>
+                        <span class="flex items-center gap-2">
+                            <span class="text-emerald-400">✓</span> Setup in 1 hour
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- Dashboard Preview -->
+                <div class="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-2xl">
+                    <div class="flex gap-2 mb-4">
+                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <!-- Mini Dashboard -->
+                    <div class="space-y-4">
+                        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+                            <div class="text-emerald-400 text-sm mb-1">Overall Status</div>
+                            <div class="text-2xl font-bold flex items-center gap-2 flex-wrap">
+                                🟢 Healthy
+                                <span class="text-sm font-normal text-slate-400">12 weeks runway</span>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-800 rounded-lg p-4">
+                                <div class="text-slate-400 text-sm mb-1">Cash Balance</div>
+                                <div class="text-xl md:text-2xl font-bold">$127,450</div>
+                                <div class="text-emerald-400 text-sm">↑ 8% this week</div>
+                            </div>
+                            <div class="bg-slate-800 rounded-lg p-4">
+                                <div class="text-slate-400 text-sm mb-1">Revenue MTD</div>
+                                <div class="text-xl md:text-2xl font-bold">$87,500</div>
+                                <div class="text-slate-400 text-sm">88% of target</div>
+                            </div>
+                        </div>
+                        <div class="bg-slate-800 rounded-lg p-4">
+                            <div class="text-slate-400 text-sm mb-2">Job Profitability</div>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between text-sm">
+                                    <span>Smith Residence</span>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-slate-400">$18,000</span>
+                                        <span class="text-emerald-400 font-medium">33%</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span>Johnson Commercial</span>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-slate-400">$45,000</span>
+                                        <span class="text-emerald-400 font-medium">38%</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between text-sm">
+                                    <span>Williams Repair</span>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-slate-400">$8,500</span>
+                                        <span class="text-amber-400 font-medium">18%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pain Points Section -->
+    <section class="py-20 px-6 bg-slate-900/50">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-4">
+                Running a Roofing Business Is Hard Enough
+            </h2>
+            <p class="text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+                You didn't start a roofing company to become an accountant. But somehow, that's where all your time goes.
+            </p>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-4xl mb-4">📦</div>
+                    <h3 class="text-xl font-semibold mb-2">Drowning in Receipts</h3>
+                    <p class="text-slate-400">Your truck console is full of Home Depot receipts. Your email is full of invoices. Your accountant is full of questions.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-4xl mb-4">🔮</div>
+                    <h3 class="text-xl font-semibold mb-2">Flying Blind on Cash</h3>
+                    <p class="text-slate-400">You finished three jobs last month but you're still scrambling for payroll. Where did the money go?</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-4xl mb-4">🎢</div>
+                    <h3 class="text-xl font-semibold mb-2">The Cash Flow Rollercoaster</h3>
+                    <p class="text-slate-400">Storm season you're flush. Winter you're stressed. One slow month and you're floating payroll on credit.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="py-20 px-6">
+        <div class="max-w-6xl mx-auto text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">
+                Meet Your AI-Powered Finance Team
+            </h2>
+            <p class="text-slate-400 mb-16 max-w-2xl mx-auto">
+                CrewCFO combines AI bookkeeping with CFO-level insights—built specifically for roofing contractors.
+            </p>
+            
+            <div class="grid md:grid-cols-3 gap-8 mb-20">
+                <div class="relative">
+                    <div class="bg-emerald-500 text-black w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">1</div>
+                    <h3 class="text-xl font-semibold mb-2">Connect</h3>
+                    <p class="text-slate-400">Link QuickBooks and your bank accounts in 5 minutes. We sync automatically.</p>
+                </div>
+                <div class="relative">
+                    <div class="bg-emerald-500 text-black w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">2</div>
+                    <h3 class="text-xl font-semibold mb-2">Automate</h3>
+                    <p class="text-slate-400">Our AI classifies transactions, assigns job costs, and flags exceptions.</p>
+                </div>
+                <div class="relative">
+                    <div class="bg-emerald-500 text-black w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">3</div>
+                    <h3 class="text-xl font-semibold mb-2">Know</h3>
+                    <p class="text-slate-400">Open your dashboard and see cash, margins, and forecast in seconds.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 px-6 bg-slate-900/50">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-4">
+                Everything You Need. Nothing You Don't.
+            </h2>
+            <p class="text-slate-400 text-center mb-12 max-w-2xl mx-auto">
+                Purpose-built for roofing contractors. Not generic accounting software with a new coat of paint.
+            </p>
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="bg-slate-900 rounded-xl p-8 border border-slate-800 hover:border-emerald-500/50 transition">
+                    <div class="flex items-start gap-4">
+                        <div class="text-4xl">🏷️</div>
+                        <div>
+                            <div class="flex items-center gap-3 mb-2 flex-wrap">
+                                <h3 class="text-xl font-semibold">AI That Knows Roofing</h3>
+                                <span class="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full">70%+ auto-classified</span>
+                            </div>
+                            <p class="text-slate-400">Our AI classifies 70%+ of transactions automatically. Home Depot? Materials. Sub payment? Labor. No rules to set up—it just learns your business.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-8 border border-slate-800 hover:border-emerald-500/50 transition">
+                    <div class="flex items-start gap-4">
+                        <div class="text-4xl">🏠</div>
+                        <div>
+                            <div class="flex items-center gap-3 mb-2 flex-wrap">
+                                <h3 class="text-xl font-semibold">Know Your Margins. Every Job.</h3>
+                                <span class="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full">Real-time job P&L</span>
+                            </div>
+                            <p class="text-slate-400">See exactly what each job cost—materials, labor, subs, dump fees—and what you actually made. No more 'gut feel' pricing.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-8 border border-slate-800 hover:border-emerald-500/50 transition">
+                    <div class="flex items-start gap-4">
+                        <div class="text-4xl">📈</div>
+                        <div>
+                            <div class="flex items-center gap-3 mb-2 flex-wrap">
+                                <h3 class="text-xl font-semibold">See 13 Weeks Ahead</h3>
+                                <span class="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full">13-week forecast</span>
+                            </div>
+                            <p class="text-slate-400">Our forecasting engine factors in AR, upcoming bills, payroll, and seasonal patterns. Never be surprised by a cash crunch again.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-8 border border-slate-800 hover:border-emerald-500/50 transition">
+                    <div class="flex items-start gap-4">
+                        <div class="text-4xl">📋</div>
+                        <div>
+                            <div class="flex items-center gap-3 mb-2 flex-wrap">
+                                <h3 class="text-xl font-semibold">Your CFO in Your Inbox</h3>
+                                <span class="bg-emerald-500/10 text-emerald-400 text-xs px-2 py-1 rounded-full">Weekly insights</span>
+                            </div>
+                            <p class="text-slate-400">Every Friday, get a plain-English summary: what happened, where you stand, and what to watch. Like a fractional CFO without the $3K/month.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="py-20 px-6">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-4">
+                Trusted by Roofers Who'd Rather Be Roofing
+            </h2>
+            <p class="text-slate-400 text-center mb-12">
+                Join contractors who've taken control of their finances.
+            </p>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-emerald-400 text-4xl mb-4">"</div>
+                    <p class="text-slate-300 mb-6 leading-relaxed">I used to spend every Sunday night doing books. Now I check the dashboard Monday morning and I'm done. CrewCFO gave me my weekends back.</p>
+                    <div class="border-t border-slate-800 pt-4">
+                        <div class="font-semibold">Jake M.</div>
+                        <div class="text-slate-400 text-sm">Summit Roofing • Denver, CO</div>
+                        <div class="text-emerald-400 text-sm mt-1">4 crews, $2.1M revenue</div>
+                    </div>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-emerald-400 text-4xl mb-4">"</div>
+                    <p class="text-slate-300 mb-6 leading-relaxed">Last year I almost missed payroll twice. This year I can see three months out. I sleep better knowing exactly where we stand.</p>
+                    <div class="border-t border-slate-800 pt-4">
+                        <div class="font-semibold">Maria S.</div>
+                        <div class="text-slate-400 text-sm">Lone Star Exteriors • Austin, TX</div>
+                        <div class="text-emerald-400 text-sm mt-1">6 crews, $3.8M revenue</div>
+                    </div>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-emerald-400 text-4xl mb-4">"</div>
+                    <p class="text-slate-300 mb-6 leading-relaxed">We were losing money on insurance jobs and didn't even know it. CrewCFO showed us our margins were 8% instead of 25%. We fixed our pricing and added $40K to the bottom line.</p>
+                    <div class="border-t border-slate-800 pt-4">
+                        <div class="font-semibold">Tom B.</div>
+                        <div class="text-slate-400 text-sm">StormPro Roofing • Oklahoma City, OK</div>
+                        <div class="text-emerald-400 text-sm mt-1">3 crews, $1.4M revenue</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20 px-6 bg-slate-900/50">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">
+                Simple Pricing. Unlimited Everything.
+            </h2>
+            <p class="text-slate-400 mb-12">
+                One plan. One price. No surprises.
+            </p>
+            
+            <div class="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-lg mx-auto">
+                <div class="text-emerald-400 font-semibold mb-2">COMPLETE</div>
+                <div class="flex items-baseline justify-center gap-2 mb-2">
+                    <span class="text-5xl font-bold">$299</span>
+                    <span class="text-slate-400">/month</span>
+                </div>
+                <div class="text-slate-400 text-sm mb-8">
+                    or $249/mo billed annually (save $600)
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 text-left mb-8">
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Unlimited transactions</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Unlimited jobs</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Unlimited users</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">AI auto-classification</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Job costing & margins</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">13-week forecast</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Weekly CFO brief</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">AR reminders</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">QuickBooks sync</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Mobile dashboard</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Email & chat support</span></div>
+                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Onboarding included</span></div>
+                </div>
+                
+                <button onclick="openCalendly()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-4 rounded-lg text-lg transition">
+                    Start 14-Day Free Trial
+                </button>
+                <p class="text-slate-500 text-sm mt-4">
+                    No credit card required. Cancel anytime.
+                </p>
+            </div>
+            
+            <!-- Comparison -->
+            <div class="mt-12 grid md:grid-cols-3 gap-4 text-sm">
+                <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                    <div class="text-slate-400 mb-1">vs. Bookkeeper</div>
+                    <div class="font-semibold">$500-1,500/mo</div>
+                    <div class="text-slate-500">+ no forecasting</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                    <div class="text-slate-400 mb-1">vs. Fractional CFO</div>
+                    <div class="font-semibold">$2,000-5,000/mo</div>
+                    <div class="text-slate-500">+ limited availability</div>
+                </div>
+                <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                    <div class="text-slate-400 mb-1">vs. Doing it yourself</div>
+                    <div class="font-semibold">Your sanity</div>
+                    <div class="text-slate-500">+ your weekends</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="py-20 px-6">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-bold text-center mb-12">
+                Frequently Asked Questions
+            </h2>
+            <div class="space-y-4">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Do I need to be good with computers?</h3>
+                    <p class="text-slate-400">If you can use email and QuickBooks, you can use CrewCFO. We handle the technical stuff. Most owners are up and running in under an hour.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Will this replace my bookkeeper?</h3>
+                    <p class="text-slate-400">It depends. Some customers replace their bookkeeper entirely. Others use CrewCFO to make their bookkeeper 3x more efficient. Either way, you'll spend less time on books.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">How does it work with QuickBooks?</h3>
+                    <p class="text-slate-400">We sync two-way with QuickBooks Online. Your books stay in QBO—we just make them smarter. Transactions, invoices, and bills flow automatically.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Is my data secure?</h3>
+                    <p class="text-slate-400">Bank-level security. We use 256-bit encryption, SOC 2 compliant infrastructure, and never store your banking credentials.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="py-20 px-6 bg-gradient-to-b from-slate-900/50 to-emerald-950/30">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">
+                Ready to Stop Guessing?
+            </h2>
+            <p class="text-slate-400 mb-8 max-w-2xl mx-auto">
+                Join roofing contractors who've taken control of their finances. 
+                Book a free demo and see your numbers clearly—maybe for the first time.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-4 rounded-lg text-lg transition">
+                    Book My Free Demo
+                </button>
+                <button onclick="openCalendly()" class="border border-slate-600 hover:border-slate-500 text-white font-semibold px-8 py-4 rounded-lg text-lg transition">
+                    Start 14-Day Trial
+                </button>
+            </div>
+            <div class="flex flex-wrap justify-center gap-8 mt-8 text-sm text-slate-500">
+                <span class="flex items-center gap-2">🔒 Bank-level security</span>
+                <span class="flex items-center gap-2">⭐ 4.9/5 rating</span>
+                <span class="flex items-center gap-2">💬 US-based support</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 px-6 border-t border-slate-800">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid md:grid-cols-4 gap-8 mb-8">
+                <div>
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="text-2xl">🏠</span>
+                        <span class="text-xl font-bold">CrewCFO</span>
+                    </div>
+                    <p class="text-slate-400 text-sm">
+                        AI-powered bookkeeping and CFO insights for roofing contractors.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4">Product</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="#features" class="hover:text-white">Features</a></li>
+                        <li><a href="#pricing" class="hover:text-white">Pricing</a></li>
+                        <li><a href="#" class="hover:text-white">Integrations</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4">Company</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="#" class="hover:text-white">About</a></li>
+                        <li><a href="#" class="hover:text-white">Blog</a></li>
+                        <li><a href="#" class="hover:text-white">Contact</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold mb-4">Legal</h4>
+                    <ul class="space-y-2 text-sm text-slate-400">
+                        <li><a href="#" class="hover:text-white">Privacy</a></li>
+                        <li><a href="#" class="hover:text-white">Terms</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-slate-500">
+                <p>© 2024 CrewCFO. Built for roofers, by people who get it.</p>
+                <div class="flex gap-4 mt-4 md:mt-0">
+                    <a href="#" class="hover:text-white">LinkedIn</a>
+                    <a href="#" class="hover:text-white">YouTube</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // ===== CONFIGURATION - UPDATE THESE =====
+        const CONFIG = {
+            calendlyUrl: 'https://calendly.com/YOUR_CALENDLY_LINK',  // Your Calendly booking link
+            dashboardUrl: 'http://localhost:8503',  // Local: http://localhost:8503 | Prod: https://app.crewcfo.com
+        };
+        // =========================================
+
+        // Calendly popup
+        function openCalendly() {
+            Calendly.initPopupWidget({url: CONFIG.calendlyUrl});
+            return false;
+        }
+        
+        // Go to dashboard
+        function goToDashboard() {
+            window.location.href = CONFIG.dashboardUrl;
+        }
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>
