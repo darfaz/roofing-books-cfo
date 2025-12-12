@@ -1,7 +1,9 @@
-# docker-compose.yml - CrewCFO Local Development Environment
-# Usage: docker-compose up
+# docker-compose.yml - CrewCFO Development Environment
+# Usage: 
+#   docker-compose up                    # Start all services
+#   docker-compose up api dashboard      # Start only API and dashboard
+#   docker-compose --profile tools up    # Include pgAdmin
 
-version: '3.8'
 
 services:
   # FastAPI Backend
@@ -9,53 +11,85 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     container_name: crewcfo-api
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - PORT=8000
     volumes:
       - ./src:/app/src
       - ./sample_data:/app/sample_data
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Note: API uses Supabase by default, postgres is optional (use --profile db)
     networks:
       - crewcfo-network
+    restart: unless-stopped
 
   # Streamlit Dashboard
   dashboard:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     container_name: crewcfo-dashboard
     ports:
-      - "8501:8501"
+      - "8503:8503"  # Updated to match your current port
     env_file:
       - .env
+    environment:
+      - PORT=8503
     volumes:
       - ./src:/app/src
-    command: streamlit run src/dashboard/owner.py --server.port 8501 --server.address 0.0.0.0
+    command: streamlit run src/dashboard/owner.py --server.port 8503 --server.address 0.0.0.0 --server.headless true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8503/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     networks:
       - crewcfo-network
+    restart: unless-stopped
 
-  # Local PostgreSQL (mirrors Supabase schema for offline dev)
-  db:
+  # Local PostgreSQL (optional - for offline dev/testing)
+  # Note: You're using Supabase in production, but local DB is useful for:
+  # - Testing without internet
+  # - Development with local data
+  # - CI/CD pipelines
+  postgres:
     image: postgres:15-alpine
     container_name: crewcfo-db
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: crewcfo
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-crewcfo}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./supabase/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./supabase/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - crewcfo-network
+    restart: unless-stopped
+    profiles:
+      - db  # Only starts with: docker-compose --profile db up
 
   # pgAdmin (optional - database GUI)
   pgadmin:
@@ -64,17 +98,21 @@ services:
     ports:
       - "5050:80"
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@crewcfo.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@crewcfo.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
     depends_on:
-      - db
+      postgres:
+        condition: service_healthy
     networks:
       - crewcfo-network
     profiles:
       - tools  # Only starts with: docker-compose --profile tools up
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
 
 networks:
   crewcfo-network:

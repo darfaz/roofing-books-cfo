@@ -26,6 +26,9 @@ python src/main.py
 
 # 6. Start the dashboard (separate terminal)
 streamlit run src/dashboard/owner.py
+
+# OR use Docker (recommended):
+docker-compose up
 ```
 
 ## Required Credentials
@@ -65,14 +68,29 @@ roofing-books-cfo/
 
 ## Development Workflow
 
-### Running locally
+### Option 1: Docker (Recommended)
+
+```bash
+# Start all services
+docker-compose up
+
+# Start only API and Dashboard (uses Supabase)
+docker-compose up api dashboard
+
+# View logs
+docker-compose logs -f
+
+# See DOCKER_SETUP.md for detailed instructions
+```
+
+### Option 2: Local Development
 
 ```bash
 # API server (auto-reloads)
 uvicorn src.main:app --reload --port 8000
 
 # Dashboard (auto-reloads)
-streamlit run src/dashboard/owner.py
+streamlit run src/dashboard/owner.py --server.port 8503
 
 # Run tests
 pytest tests/
