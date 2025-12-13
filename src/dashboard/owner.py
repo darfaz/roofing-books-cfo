@@ -22,34 +22,170 @@ load_dotenv()
 
 # Page config
 st.set_page_config(
-    page_title="Roofing Books CFO",
+    page_title="CrewCFO | Owner Dashboard",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Custom CSS to match marketing website design
 st.markdown("""
 <style>
-    .stMetric {
-        background-color: #1E1E1E;
-        padding: 15px;
-        border-radius: 10px;
+    /* Main theme - match marketing website colors */
+    .main > div {
+        padding-top: 1rem;
+        background-color: #0a0f1a;
     }
-    .health-banner {
-        background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
+    
+    [data-testid="stAppViewContainer"] {
+        background-color: #0a0f1a;
         color: white;
     }
+    
+    [data-testid="stHeader"] {
+        background-color: #0a0f1a;
+        height: 0;
+    }
+    
+    [data-testid="stSidebar"] {
+        background-color: #0f172a;
+    }
+    
+    /* Typography */
+    h1, h2, h3 {
+        color: white !important;
+        font-weight: 700;
+    }
+    
+    /* Metrics cards - match website card style */
+    [data-testid="metric-container"] {
+        background-color: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    
+    [data-testid="metric-container"] label {
+        color: #94a3b8 !important;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    [data-testid="metric-container"] [data-testid="metric-value"] {
+        color: white !important;
+        font-size: 1.875rem;
+        font-weight: 700;
+    }
+    
+    [data-testid="metric-container"] [data-testid="metric-delta"] {
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    /* Health banner */
+    .health-banner {
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        color: white;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    
+    .health-banner.healthy {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%);
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+    
+    .health-banner.watch {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.1) 100%);
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+    
+    .health-banner.critical {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(248, 113, 113, 0.1) 100%);
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+    
+    .health-banner h2 {
+        margin: 0;
+        font-size: 1.875rem;
+        font-weight: 700;
+    }
+    
+    .health-banner p {
+        margin: 0.5rem 0 0 0;
+        color: #cbd5e1;
+        font-size: 1rem;
+    }
+    
+    /* Charts background */
+    [data-testid="stPlotlyChart"] {
+        background-color: #0f172a;
+        border-radius: 12px;
+        border: 1px solid #1e293b;
+        padding: 1rem;
+    }
+    
+    /* Subheaders */
+    .stSubheader {
+        color: white !important;
+        font-weight: 600;
+        padding: 1rem 0 0.5rem 0;
+    }
+    
+    /* Action items styling */
     .action-item {
-        background: #1a1a2e;
-        padding: 10px 15px;
-        border-radius: 5px;
-        margin-bottom: 10px;
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+    
+    .action-priority {
+        font-size: 1.25rem;
+        line-height: 1;
+    }
+    
+    .action-text {
+        flex: 1;
+        color: #e2e8f0;
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+    
+    .action-impact {
+        color: #94a3b8;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 500;
+    }
+    
+    /* Dividers */
+    hr {
+        border: none;
+        height: 1px;
+        background: #1e293b;
+        margin: 2rem 0;
+    }
+    
+    /* Warning/info boxes */
+    [data-testid="stAlert"] {
+        background-color: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 8px;
+        color: white;
+    }
+    
+    /* Caption text */
+    .caption {
+        color: #64748b;
+        font-size: 0.875rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -194,9 +330,9 @@ def get_action_items(tenant_id: str):
     # In a real app, this would query overdue items, low margin jobs, etc.
     # For now, return mock data
     return [
-        {"priority": "🔴", "item": "Follow up on Johnson invoice ($15,000) - 45 days overdue", "impact": "High"},
-        {"priority": "🟡", "item": "Review Smith job margins (currently 18%)", "impact": "Medium"},
-        {"priority": "🟢", "item": "Send estimate follow-up to Williams prospect", "impact": "Low"},
+        {"priority": ":red_circle:", "item": "Follow up on Johnson invoice ($15,000) - 45 days overdue", "impact": "High"},
+        {"priority": ":orange_circle:", "item": "Review Smith job margins (currently 18%)", "impact": "Medium"},
+        {"priority": ":green_circle:", "item": "Send estimate follow-up to Williams prospect", "impact": "Low"},
     ]
 
 # ============================================================
@@ -438,8 +574,13 @@ def main():
         forecast = data["forecast"]
         jobs = data["jobs"]
     
-    # Header
-    st.title("🏠 Owner Dashboard")
+    # Header with CrewCFO branding
+    st.markdown("""
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+        <span style="font-size: 2rem;">:house:</span>
+        <h1 style="margin: 0; font-size: 2rem; font-weight: 700; color: white;">CrewCFO</h1>
+    </div>
+    """, unsafe_allow_html=True)
     st.caption(f"Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
     
     # ========================================
@@ -447,66 +588,74 @@ def main():
     # ========================================
     runway = cash.get("runway_weeks", 0)
     ar_overdue_pct = (ar_aging.get("61-90", 0) + ar_aging.get("90+", 0)) / max(sum(ar_aging.values()), 1) * 100
-    
+
     if runway >= 8 and ar_overdue_pct < 15:
-        health_color = "🟢"
         health_status = "Healthy"
-        health_bg = "linear-gradient(90deg, #1a472a 0%, #2d5a3d 100%)"
+        health_emoji = ":green_circle:"
+        health_bg = "rgba(16, 185, 129, 0.15)"
+        health_border = "rgba(16, 185, 129, 0.4)"
+        health_text_color = "#10b981"
     elif runway >= 4:
-        health_color = "🟡"
-        health_status = "Watch"
-        health_bg = "linear-gradient(90deg, #5a4a1a 0%, #6b5a2d 100%)"
+        health_status = "Warning"
+        health_emoji = ":orange_circle:"
+        health_bg = "rgba(245, 158, 11, 0.15)"
+        health_border = "rgba(245, 158, 11, 0.4)"
+        health_text_color = "#f59e0b"
     else:
-        health_color = "🔴"
-        health_status = "Critical"
-        health_bg = "linear-gradient(90deg, #4a1a1a 0%, #5a2d2d 100%)"
-    
+        health_status = "Alert"
+        health_emoji = ":red_circle:"
+        health_bg = "rgba(239, 68, 68, 0.15)"
+        health_border = "rgba(239, 68, 68, 0.4)"
+        health_text_color = "#ef4444"
+
     st.markdown(f"""
-    <div style="background: {health_bg}; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-        <h2 style="color: white; margin: 0;">{health_color} Overall Status: {health_status}</h2>
-        <p style="color: #ccc; margin: 5px 0 0 0;">
-            Cash runway: {runway} weeks | AR overdue: {ar_overdue_pct:.0f}% | Revenue MTD: {revenue['progress']*100:.0f}% of target
+    <div style="background: {health_bg}; border: 1px solid {health_border}; padding: 20px; border-radius: 12px; margin-bottom: 24px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.5rem; color: {health_text_color};">{health_emoji}</span>
+            <span style="font-size: 1.5rem; font-weight: 700; color: {health_text_color};">{health_status}</span>
+        </div>
+        <p style="color: #94a3b8; margin: 8px 0 0 0; font-size: 0.95rem;">
+            Cash runway: {runway} weeks &nbsp;|&nbsp; AR overdue: {ar_overdue_pct:.0f}% &nbsp;|&nbsp; Revenue MTD: {revenue['progress']*100:.0f}% of target
         </p>
     </div>
     """, unsafe_allow_html=True)
     
     # ========================================
-    # Row 1: Key Metrics
+    # Row 1: Key Metrics (4 cards)
     # ========================================
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         st.metric(
-            "💵 Cash Balance",
+            ":dollar: Cash Balance",
             f"${cash.get('total_cash', 0):,.0f}",
             f"{cash.get('change_wow', 0):+.0%} WoW"
         )
-    
+
     with col2:
         progress_pct = revenue['progress'] * 100
-        delta_color = "normal" if progress_pct >= 80 else "inverse"
         st.metric(
-            "📈 Revenue MTD",
+            ":chart_with_upwards_trend: Revenue MTD",
             f"${revenue['mtd']:,.0f}",
             f"{progress_pct:.0f}% of ${revenue['target']/1000:.0f}K target"
         )
-    
+
     with col3:
         total_ar = sum(ar_aging.values())
         overdue = ar_aging.get("61-90", 0) + ar_aging.get("90+", 0)
         st.metric(
-            "📋 AR Outstanding",
+            ":clipboard: AR Outstanding",
             f"${total_ar:,.0f}",
             f"${overdue:,.0f} overdue",
             delta_color="inverse" if overdue > 0 else "normal"
         )
-    
+
     with col4:
         # Backlog - mock for now
         backlog = 350000
         backlog_jobs = 8
         st.metric(
-            "🔧 Backlog",
+            ":wrench: Backlog",
             f"${backlog:,.0f}",
             f"{backlog_jobs} jobs scheduled"
         )
@@ -519,67 +668,90 @@ def main():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📊 13-Week Cash Forecast")
-        
+        st.subheader(":chart_with_upwards_trend: 13-Week Cash Forecast")
+
         if forecast:
             df = pd.DataFrame(forecast)
-            
+
             fig = go.Figure()
-            
-            # Confidence band
-            fig.add_trace(go.Scatter(
-                x=df['week_start_date'],
-                y=df['optimistic_cash'],
-                name='Optimistic',
-                line=dict(color='rgba(46, 204, 113, 0.5)', dash='dot'),
-                showlegend=True
-            ))
-            
+
+            # Baseline line (emerald accent)
             fig.add_trace(go.Scatter(
                 x=df['week_start_date'],
                 y=df['ending_cash'],
                 name='Baseline',
-                line=dict(color='#3498db', width=3),
-                fill='tonexty',
-                fillcolor='rgba(52, 152, 219, 0.1)'
+                line=dict(color='#10b981', width=3),
+                mode='lines'
             ))
-            
+
+            # Optimistic line (lighter emerald)
+            fig.add_trace(go.Scatter(
+                x=df['week_start_date'],
+                y=df['optimistic_cash'],
+                name='Optimistic',
+                line=dict(color='#34d399', width=2, dash='dot'),
+                mode='lines'
+            ))
+
+            # Pessimistic line (amber)
             fig.add_trace(go.Scatter(
                 x=df['week_start_date'],
                 y=df['pessimistic_cash'],
                 name='Pessimistic',
-                line=dict(color='rgba(231, 76, 60, 0.5)', dash='dot'),
-                fill='tonexty',
-                fillcolor='rgba(52, 152, 219, 0.1)'
+                line=dict(color='#f59e0b', width=2, dash='dot'),
+                mode='lines'
             ))
-            
+
             # Minimum balance line
-            fig.add_hline(y=25000, line_dash="dash", line_color="orange",
-                         annotation_text="Min Balance ($25K)")
-            
+            fig.add_hline(
+                y=25000,
+                line_dash="dash",
+                line_color="#ef4444",
+                annotation_text="Min Balance ($25K)",
+                annotation_font_color="#94a3b8"
+            )
+
+            # Dark theme layout
             fig.update_layout(
                 height=350,
                 margin=dict(l=0, r=0, t=10, b=0),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    font=dict(color="#94a3b8")
+                ),
                 yaxis_tickformat='$,.0f',
                 xaxis_title="",
-                yaxis_title=""
+                yaxis_title="",
+                paper_bgcolor='#0f172a',
+                plot_bgcolor='#0f172a',
+                xaxis=dict(
+                    gridcolor='#1e293b',
+                    tickfont=dict(color='#94a3b8'),
+                    linecolor='#1e293b'
+                ),
+                yaxis=dict(
+                    gridcolor='#1e293b',
+                    tickfont=dict(color='#94a3b8'),
+                    linecolor='#1e293b'
+                )
             )
-            
+
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No forecast data available")
     
     with col2:
-        st.subheader("📋 AR Aging")
-        
+        st.subheader(":clipboard: AR Aging")
+
         ar_df = pd.DataFrame({
             'Bucket': list(ar_aging.keys()),
             'Amount': list(ar_aging.values())
         })
-        
-        colors = ['#2ecc71', '#f1c40f', '#e67e22', '#e74c3c']
-        
+
+        colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444']
+
         fig = px.bar(
             ar_df,
             x='Bucket',
@@ -587,16 +759,28 @@ def main():
             color='Bucket',
             color_discrete_sequence=colors
         )
-        
+
         fig.update_layout(
             height=350,
             margin=dict(l=0, r=0, t=10, b=0),
             showlegend=False,
             yaxis_tickformat='$,.0f',
             xaxis_title="",
-            yaxis_title=""
+            yaxis_title="",
+            paper_bgcolor='#0f172a',
+            plot_bgcolor='#0f172a',
+            xaxis=dict(
+                gridcolor='#1e293b',
+                tickfont=dict(color='#94a3b8'),
+                linecolor='#1e293b'
+            ),
+            yaxis=dict(
+                gridcolor='#1e293b',
+                tickfont=dict(color='#94a3b8'),
+                linecolor='#1e293b'
+            )
         )
-        
+
         st.plotly_chart(fig, use_container_width=True)
     
     st.divider()
@@ -607,53 +791,54 @@ def main():
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.subheader("🔨 Job Profitability")
-        
+        st.subheader(":hammer: Job Profitability")
+
         if jobs:
             jobs_df = pd.DataFrame(jobs)
-            
+
             # Color by margin
             def margin_color(margin):
                 if margin >= 35:
-                    return '#2ecc71'
+                    return '#10b981'
                 elif margin >= 25:
-                    return '#f1c40f'
+                    return '#f59e0b'
                 else:
-                    return '#e74c3c'
-            
+                    return '#ef4444'
+
             jobs_df['color'] = jobs_df['actual_margin_pct'].apply(margin_color)
-            
+
             fig = px.treemap(
                 jobs_df,
                 path=['job_number'],
                 values='contract_amount',
                 color='actual_margin_pct',
-                color_continuous_scale=['#e74c3c', '#f1c40f', '#2ecc71'],
+                color_continuous_scale=['#ef4444', '#f59e0b', '#10b981'],
                 range_color=[15, 45],
                 hover_data=['name', 'actual_cost', 'status']
             )
-            
+
             fig.update_layout(
                 height=300,
-                margin=dict(l=0, r=0, t=10, b=0)
+                margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor='#0f172a'
             )
-            
+
             fig.update_traces(
                 textinfo="label+value",
                 texttemplate="%{label}<br>$%{value:,.0f}"
             )
-            
+
             st.plotly_chart(fig, use_container_width=True)
-            
+
             # Low margin warning
             low_margin_jobs = [j for j in jobs if j.get('actual_margin_pct', 0) < 25]
             if low_margin_jobs:
-                st.warning(f"⚠️ {len(low_margin_jobs)} job(s) below 25% margin")
+                st.warning(f":warning: {len(low_margin_jobs)} job(s) below 25% margin")
         else:
             st.info("No job data available")
-    
+
     with col2:
-        st.subheader("⚡ Action Items")
+        st.subheader(":zap: Action Items")
         
         actions = get_action_items(tenant_id)
         
@@ -668,9 +853,9 @@ def main():
                     st.caption(action["impact"])
         
         st.divider()
-        
+
         # Quick stats
-        st.subheader("📈 Quick Stats")
+        st.subheader(":bar_chart: Quick Stats")
         st.metric("Jobs Completed MTD", "12")
         st.metric("Avg Job Size", "$18,500")
         st.metric("Win Rate", "34%")
