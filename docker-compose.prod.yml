@@ -1,8 +1,6 @@
 # docker-compose.prod.yml - CrewCFO Production (DigitalOcean)
 # Usage: docker-compose -f docker-compose.prod.yml up -d
 
-version: '3.8'
-
 services:
   # Nginx - Serves landing page + reverse proxy
   nginx:
@@ -45,13 +43,19 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: crewcfo-dashboard
-    expose:
-      - "8501"
+    ports:
+      - "8501:8501"
     env_file:
       - .env
     environment:
       - ENV=production
     command: streamlit run src/dashboard/owner.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - crewcfo-network
     restart: always
