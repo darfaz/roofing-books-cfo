@@ -1,0 +1,27 @@
+# Core LangChain
+langchain==0.3.13
+langchain-anthropic==0.3.0
+langchain-community==0.3.13
+langchain-core==0.3.28
+
+# LangGraph (for agent)
+langgraph==0.2.60
+
+# Vector store
+chromadb==0.5.23
+
+# Embeddings (free, local)
+sentence-transformers==3.3.1
+
+# Document loaders
+pypdf==5.1.0
+python-docx==1.1.2
+unstructured==0.16.11
+markdown==3.7
+
+# CLI
+rich==13.9.4
+typer==0.15.1
+
+# Environment
+python-dotenv==1.0.1

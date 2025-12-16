@@ -50,3 +50,10 @@ id_rsa.pub
 *.tmp
 *.bak
 *~
+
+# CrewCFO Knowledge Base
+crewcfo-knowledge-base/venv/
+crewcfo-knowledge-base/chroma_db/
+crewcfo-knowledge-base/.env
+crewcfo-knowledge-base/__pycache__/
+
