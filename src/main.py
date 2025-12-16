@@ -5,7 +5,7 @@ FastAPI application for bookkeeping automation
 import os
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 import httpx
@@ -467,6 +467,477 @@ async def classify_transactions_batch(
         return result
     except Exception as e:
         raise HTTPException(500, f"Classification error: {str(e)}")
+
+# ============================================================
+# VALUATION API
+# ============================================================
+
+@app.get("/api/valuation/snapshot")
+async def get_valuation_snapshot(tenant_id: str):
+    """
+    Get the latest valuation snapshot for a tenant
+    
+    Returns the most recent valuation calculation with TTM financials,
+    tier assessment, and confidence scoring.
+    """
+    try:
+        # Get latest snapshot
+        result = supabase.table("valuation_snapshots")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .order("as_of_date", desc=True)\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+        
+        if not result.data:
+            return {
+                "success": False,
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "No valuation snapshot found for this tenant"
+                }
+            }
+        
+        snapshot = result.data[0]
+        
+        # Get driver scores for this snapshot
+        driver_scores_result = supabase.table("driver_scores")\
+            .select("*")\
+            .eq("valuation_snapshot_id", snapshot["id"])\
+            .execute()
+        
+        # Build drivers summary from driver scores
+        # Convert from 0-100 scale to 0-5 scale for API response
+        drivers_summary = {}
+        for driver in driver_scores_result.data:
+            score_value = driver["score"] / 20.0 if driver["score"] <= 100 else 5.0
+            drivers_summary[driver["driver_key"]] = round(score_value, 2)
+        
+        # If no drivers linked, try to get from drivers_json
+        if not drivers_summary and snapshot.get("drivers_json"):
+            drivers_summary = snapshot["drivers_json"]
+        
+        # Calculate value delta from previous snapshot if available
+        prev_result = supabase.table("valuation_snapshots")\
+            .select("ev_low, ev_high")\
+            .eq("tenant_id", tenant_id)\
+            .lt("as_of_date", snapshot["as_of_date"])\
+            .order("as_of_date", desc=True)\
+            .limit(1)\
+            .execute()
+        
+        value_delta = None
+        if prev_result.data:
+            prev_ev_avg = (float(prev_result.data[0]["ev_low"]) + float(prev_result.data[0]["ev_high"])) / 2
+            curr_ev_avg = (float(snapshot["ev_low"]) + float(snapshot["ev_high"])) / 2
+            delta = curr_ev_avg - prev_ev_avg
+            pct_change = (delta / prev_ev_avg * 100) if prev_ev_avg > 0 else 0
+            value_delta = {
+                "from_previous": round(delta, 2),
+                "percentage_change": round(pct_change, 2)
+            }
+        
+        # Build automation flags
+        automation_flags = {
+            "requires_review": snapshot.get("review_required", False),
+            "high_confidence": snapshot.get("confidence_score", 0) >= 80,
+            "tier_change": False  # TODO: Compare with previous snapshot tier
+        }
+        
+        snapshot_data = {
+            "id": snapshot["id"],
+            "tenant_id": snapshot["tenant_id"],
+            "as_of_date": snapshot["as_of_date"],
+            "ttm_revenue": float(snapshot["ttm_revenue"]),
+            "ttm_sde": float(snapshot["ttm_sde"]),
+            "ttm_ebitda": float(snapshot["ttm_ebitda"]),
+            "tier": snapshot["tier"],
+            "multiple_low": float(snapshot["multiple_low"]),
+            "multiple_high": float(snapshot["multiple_high"]),
+            "ev_low": float(snapshot["ev_low"]),
+            "ev_high": float(snapshot["ev_high"]),
+            "confidence_score": snapshot["confidence_score"],
+            "drivers_summary": drivers_summary,
+            "created_at": snapshot["created_at"],
+            "updated_at": snapshot["updated_at"]
+        }
+        
+        if value_delta:
+            snapshot_data["value_delta"] = value_delta
+        snapshot_data["automation_flags"] = automation_flags
+        
+        return {
+            "success": True,
+            "data": {
+                "snapshot": snapshot_data
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to retrieve valuation snapshot: {str(e)}"
+                }
+            }
+        )
+
+@app.post("/api/valuation/snapshot")
+async def create_valuation_snapshot(
+    tenant_id: str,
+    request_body: dict = Body(default={})
+):
+    """
+    Trigger recalculation and create a new valuation snapshot
+    
+    Request body:
+        as_of_date: Date for snapshot (ISO format YYYY-MM-DD). Defaults to today.
+        force_recalculation: Force recalculation even if snapshot exists for date (default: False)
+        include_projections: Include future projections in calculation (default: True)
+    
+    Returns:
+        Created snapshot with processing metadata
+    """
+    from datetime import date
+    
+    try:
+        # Parse request body parameters
+        as_of_date = request_body.get("as_of_date")
+        force_recalculation = request_body.get("force_recalculation", False)
+        include_projections = request_body.get("include_projections", True)
+        
+        # Parse as_of_date or use today
+        if as_of_date:
+            snapshot_date = date.fromisoformat(as_of_date)
+        else:
+            snapshot_date = date.today()
+        
+        # Use ValuationEngine to calculate valuation
+        from services.valuation.engine import ValuationEngine
+        import time
+        
+        start_time = time.time()
+        
+        try:
+            engine = ValuationEngine(tenant_id)
+            snapshot_data = engine.create_valuation_snapshot(
+                as_of_date=snapshot_date,
+                force_recalculation=force_recalculation
+            )
+            
+            # Insert snapshot into database
+            result = supabase.table("valuation_snapshots")\
+                .insert(snapshot_data)\
+                .execute()
+            
+            if not result.data:
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "success": False,
+                        "error": {
+                            "code": "DATABASE_ERROR",
+                            "message": "Failed to save valuation snapshot"
+                        }
+                    }
+                )
+            
+            snapshot = result.data[0]
+            processing_time_ms = int((time.time() - start_time) * 1000)
+            
+            return {
+                "success": True,
+                "data": {
+                    "snapshot": {
+                        "id": snapshot["id"],
+                        "tenant_id": snapshot["tenant_id"],
+                        "as_of_date": snapshot["as_of_date"],
+                        "ttm_revenue": float(snapshot["ttm_revenue"]),
+                        "ttm_sde": float(snapshot["ttm_sde"]),
+                        "ttm_ebitda": float(snapshot["ttm_ebitda"]),
+                        "tier": snapshot["tier"],
+                        "multiple_low": float(snapshot["multiple_low"]),
+                        "multiple_high": float(snapshot["multiple_high"]),
+                        "ev_low": float(snapshot["ev_low"]),
+                        "ev_high": float(snapshot["ev_high"]),
+                        "confidence_score": snapshot["confidence_score"],
+                        "drivers_json": snapshot.get("drivers_json", {}),
+                        "created_at": snapshot["created_at"],
+                        "updated_at": snapshot["updated_at"]
+                    },
+                    "processing_time_ms": processing_time_ms,
+                    "data_sources_used": ["books_os", "driver_scores", "market_data"]
+                }
+            }
+        except ValueError as e:
+            # ValuationEngine raises ValueError for business logic errors
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": str(e)
+                    }
+                }
+            )
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid date format: {str(e)}"
+                }
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to create valuation snapshot: {str(e)}"
+                }
+            }
+        )
+
+@app.get("/api/valuation/snapshots")
+async def get_valuation_snapshots(
+    tenant_id: str,
+    limit: int = 12,
+    page: int = 1
+):
+    """
+    Get historical valuation snapshots for timeline
+    
+    Args:
+        tenant_id: Tenant UUID
+        limit: Number of snapshots per page (default: 12, max: 100)
+        page: Page number (default: 1)
+    
+    Returns:
+        List of historical snapshots with pagination
+    """
+    try:
+        limit = min(limit, 100)  # Cap at 100
+        offset = (page - 1) * limit
+        
+        result = supabase.table("valuation_snapshots")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .order("as_of_date", desc=True)\
+            .order("created_at", desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+        
+        # Get total count for pagination
+        count_result = supabase.table("valuation_snapshots")\
+            .select("id", count="exact")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+        
+        total = count_result.count if hasattr(count_result, 'count') else len(result.data)
+        total_pages = (total + limit - 1) // limit if total > 0 else 1
+        
+        snapshots = []
+        for snap in result.data:
+            snapshots.append({
+                "id": snap["id"],
+                "tenant_id": snap["tenant_id"],
+                "as_of_date": snap["as_of_date"],
+                "ttm_revenue": float(snap["ttm_revenue"]),
+                "ttm_sde": float(snap["ttm_sde"]),
+                "ttm_ebitda": float(snap["ttm_ebitda"]),
+                "tier": snap["tier"],
+                "multiple_low": float(snap["multiple_low"]),
+                "multiple_high": float(snap["multiple_high"]),
+                "ev_low": float(snap["ev_low"]),
+                "ev_high": float(snap["ev_high"]),
+                "confidence_score": snap["confidence_score"],
+                "created_at": snap["created_at"],
+                "updated_at": snap["updated_at"]
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "snapshots": snapshots,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "pages": total_pages
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to retrieve valuation snapshots: {str(e)}"
+                }
+            }
+        )
+
+@app.get("/api/valuation/drivers")
+async def get_driver_scores(
+    tenant_id: str,
+    as_of_date: str = None,
+    driver_key: str = None,
+    include_evidence: bool = False
+):
+    """
+    Get driver scores for a tenant
+    
+    Args:
+        tenant_id: Tenant UUID
+        as_of_date: Specific date (ISO format YYYY-MM-DD). Defaults to latest.
+        driver_key: Filter by specific driver key
+        include_evidence: Include supporting evidence details
+    
+    Returns:
+        Driver scores with overall assessment
+    """
+    from datetime import date
+    
+    try:
+        query = supabase.table("driver_scores")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)
+        
+        # Filter by date if provided
+        if as_of_date:
+            query = query.eq("as_of_date", as_of_date)
+        else:
+            # Get latest date for this tenant
+            latest_date_result = supabase.table("driver_scores")\
+                .select("as_of_date")\
+                .eq("tenant_id", tenant_id)\
+                .order("as_of_date", desc=True)\
+                .limit(1)\
+                .execute()
+            
+            if latest_date_result.data:
+                query = query.eq("as_of_date", latest_date_result.data[0]["as_of_date"])
+            else:
+                return {
+                    "success": True,
+                    "data": {
+                        "scores": [],
+                        "overall_score": 0,
+                        "tier_impact": None
+                    }
+                }
+        
+        # Filter by driver if provided
+        if driver_key:
+            query = query.eq("driver_key", driver_key)
+        
+        query = query.order("driver_key")
+        
+        result = query.execute()
+        
+        if not result.data:
+            return {
+                "success": True,
+                "data": {
+                    "scores": [],
+                    "overall_score": 0,
+                    "tier_impact": None
+                }
+            }
+        
+        # Process scores
+        scores = []
+        total_score = 0
+        count = 0
+        
+        for driver in result.data:
+            # Driver scores are stored as 0-100 in DB, convert to 0-5 scale for API
+            # Assuming score of 0-100 maps to 0-5 (divide by 20)
+            score_value = driver["score"] / 20.0 if driver["score"] <= 100 else 5.0
+            
+            score_data = {
+                "id": driver["id"],
+                "tenant_id": driver["tenant_id"],
+                "as_of_date": driver["as_of_date"],
+                "driver_key": driver["driver_key"],
+                "score": round(score_value, 2),
+                "max_score": 5.0,  # Matador uses 1-5 scale
+                "confidence": driver["confidence"],
+                "computed_by": driver["computed_by"],
+                "created_at": driver["created_at"]
+            }
+            
+            # Include evidence if requested
+            if include_evidence and driver.get("evidence_refs"):
+                score_data["evidence_refs"] = driver["evidence_refs"]
+            
+            # Include additional details if available
+            if driver.get("impact_on_multiple"):
+                score_data["impact_on_multiple"] = float(driver["impact_on_multiple"])
+            
+            # Calculate improvement potential (max score - current score)
+            score_data["improvement_potential"] = round(5.0 - score_value, 1)
+            
+            scores.append(score_data)
+            total_score += score_value
+            count += 1
+        
+        # Calculate overall score (average)
+        overall_score = round(total_score / count, 2) if count > 0 else 0
+        
+        # Determine tier impact based on overall score
+        if overall_score < 3.0:
+            tier_impact = "below_avg"
+        elif overall_score < 4.0:
+            tier_impact = "avg"
+        else:
+            tier_impact = "above_avg"
+        
+        return {
+            "success": True,
+            "data": {
+                "scores": scores,
+                "overall_score": overall_score,
+                "tier_impact": tier_impact
+            }
+        }
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": f"Invalid date format: {str(e)}"
+                }
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to retrieve driver scores: {str(e)}"
+                }
+            }
+        )
 
 # ============================================================
 # RUN SERVER
