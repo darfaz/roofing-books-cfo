@@ -60,6 +60,25 @@ services:
       - crewcfo-network
     restart: always
 
+  # React Frontend (Valuation Dashboard)
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: crewcfo-web
+    expose:
+      - "3000"
+    env_file:
+      - .env
+    environment:
+      # Vite envs are baked at build; these are here for consistency/documentation.
+      - VITE_SUPABASE_URL=${SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - VITE_API_BASE_URL=http://nginx
+    networks:
+      - crewcfo-network
+    restart: always
+
 networks:
   crewcfo-network:
     driver: bridge

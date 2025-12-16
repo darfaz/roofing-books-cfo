@@ -22,6 +22,9 @@ supabase: Client = create_client(
     os.getenv("SUPABASE_SERVICE_KEY", "")
 )
 
+# Auth helper (Supabase Auth -> tenant context)
+from utils.auth import get_current_tenant_id
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events"""
@@ -473,7 +476,7 @@ async def classify_transactions_batch(
 # ============================================================
 
 @app.get("/api/valuation/snapshot")
-async def get_valuation_snapshot(tenant_id: str):
+async def get_valuation_snapshot(tenant_id: str = Depends(get_current_tenant_id)):
     """
     Get the latest valuation snapshot for a tenant
     
@@ -587,7 +590,7 @@ async def get_valuation_snapshot(tenant_id: str):
 
 @app.post("/api/valuation/snapshot")
 async def create_valuation_snapshot(
-    tenant_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
     request_body: dict = Body(default={})
 ):
     """
@@ -712,7 +715,7 @@ async def create_valuation_snapshot(
 
 @app.get("/api/valuation/snapshots")
 async def get_valuation_snapshots(
-    tenant_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
     limit: int = 12,
     page: int = 1
 ):
@@ -793,7 +796,7 @@ async def get_valuation_snapshots(
 
 @app.get("/api/valuation/drivers")
 async def get_driver_scores(
-    tenant_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
     as_of_date: str = None,
     driver_key: str = None,
     include_evidence: bool = False
