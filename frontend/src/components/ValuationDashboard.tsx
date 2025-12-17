@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { supabase } from '../lib/supabase'
 import { ScenarioSimulator } from './ScenarioSimulator'
 import { ExitReadiness } from './ExitReadiness'
 import { ValuationRoadmap } from './ValuationRoadmap'
@@ -69,7 +70,7 @@ const DRIVER_LABELS: Record<string, { label: string; icon: string; description: 
   },
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Data is fetched directly from Supabase
 
 export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [snapshot, setSnapshot] = useState<ValuationSnapshot | null>(null)
@@ -84,32 +85,56 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
 
-  const authHeaders = {
-    Authorization: `Bearer ${accessToken}`,
-  }
-
   const fetchValuationData = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const snapshotRes = await fetch(`${API_BASE_URL}/api/valuation/snapshot`, {
-        headers: authHeaders,
-      })
-      const snapshotJson = await snapshotRes.json()
-      if (snapshotJson.success) setSnapshot(snapshotJson.data.snapshot)
+      // Get user's tenant_id from session
+      const { data: { user } } = await supabase.auth.getUser()
+      const tenantId = user?.user_metadata?.tenant_id
 
-      const driversRes = await fetch(`${API_BASE_URL}/api/valuation/drivers`, {
-        headers: authHeaders,
-      })
-      const driversJson = await driversRes.json()
-      if (driversJson.success) setDriverScores(driversJson.data.scores || [])
+      if (!tenantId) {
+        setError('No tenant_id found in user metadata')
+        return
+      }
 
-      const histRes = await fetch(`${API_BASE_URL}/api/valuation/snapshots?limit=12`, {
-        headers: authHeaders,
-      })
-      const histJson = await histRes.json()
-      if (histJson.success) setHistoricalSnapshots(histJson.data.snapshots || [])
+      // Fetch latest snapshot directly from Supabase
+      const { data: snapshotData, error: snapshotError } = await supabase
+        .from('valuation_snapshots')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('as_of_date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (snapshotError && snapshotError.code !== 'PGRST116') {
+        console.error('Snapshot error:', snapshotError)
+      }
+      if (snapshotData) setSnapshot(snapshotData)
+
+      // Fetch driver scores
+      const { data: driversData, error: driversError } = await supabase
+        .from('driver_scores')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('as_of_date', { ascending: false })
+
+      if (driversError) console.error('Drivers error:', driversError)
+      if (driversData) setDriverScores(driversData)
+
+      // Fetch historical snapshots
+      const { data: histData, error: histError } = await supabase
+        .from('valuation_snapshots')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('as_of_date', { ascending: false })
+        .limit(12)
+
+      if (histError) console.error('History error:', histError)
+      if (histData) setHistoricalSnapshots(histData)
+
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load valuation data')
     } finally {
@@ -141,7 +166,8 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
     }
   }
 
-  const scoreTo100 = (score0to5: number) => Math.round((score0to5 / 5) * 100)
+  // Driver scores are already 0-100 in database
+  const scoreTo100 = (score: number) => Math.round(score)
 
   const tabOptions = useMemo(
     () => [
