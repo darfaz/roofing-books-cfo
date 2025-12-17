@@ -5,7 +5,7 @@ FastAPI application for bookkeeping automation
 import os
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Depends, Body
+from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 import httpx
@@ -29,6 +29,12 @@ from utils.auth import get_current_tenant_id
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events"""
     print("🚀 Starting Roofing Books CFO API...")
+    # Ensure Supabase Storage bucket(s) exist (service role only)
+    try:
+        supabase.storage.create_bucket("deal-room", options={"public": False})
+    except Exception:
+        # bucket may already exist or the storage API may be unavailable in some envs
+        pass
     yield
     print("👋 Shutting down...")
 
@@ -940,6 +946,470 @@ async def get_driver_scores(
                     "message": f"Failed to retrieve driver scores: {str(e)}"
                 }
             }
+        )
+
+
+@app.post("/api/valuation/simulate")
+async def simulate_valuation(
+    tenant_id: str = Depends(get_current_tenant_id),
+    request_body: dict = Body(...)
+):
+    """
+    Simulate valuation under "what-if" levers.
+
+    Body:
+      { levers: { recurring_revenue_delta, margin_delta, owner_hours_delta, productivity_delta } }
+
+    Response:
+      { projected_ebitda, projected_multiple, projected_ev_low, projected_ev_high }
+    """
+    try:
+        levers = request_body.get("levers") or {}
+        rr_delta = float(levers.get("recurring_revenue_delta", 0.0))  # fraction
+        margin_delta = float(levers.get("margin_delta", 0.0))  # fraction points
+        owner_hours_delta = float(levers.get("owner_hours_delta", 0.0))  # hours (new - current)
+        prod_delta = float(levers.get("productivity_delta", 0.0))  # fraction
+
+        # Load latest snapshot as baseline
+        snap_res = supabase.table("valuation_snapshots")\
+            .select("ttm_revenue, ttm_ebitda, multiple_low, multiple_high, tier")\
+            .eq("tenant_id", tenant_id)\
+            .order("as_of_date", desc=True)\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+
+        if not snap_res.data:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "success": False,
+                    "error": {"code": "NOT_FOUND", "message": "No valuation snapshot found to simulate from"}
+                }
+            )
+
+        snap = snap_res.data[0]
+        base_revenue = float(snap.get("ttm_revenue") or 0)
+        base_ebitda = float(snap.get("ttm_ebitda") or 0)
+        base_multiple_low = float(snap.get("multiple_low") or 0)
+        base_multiple_high = float(snap.get("multiple_high") or 0)
+        base_tier = snap.get("tier") or "below_avg"
+
+        # --- First-pass projection model ---
+        # Revenue lever scales revenue
+        projected_revenue = max(0.0, base_revenue * (1.0 + rr_delta))
+
+        # Margin lever adjusts EBITDA margin directly
+        base_margin = (base_ebitda / base_revenue) if base_revenue > 0 else 0.0
+        projected_margin = max(-1.0, min(1.0, base_margin + margin_delta))
+
+        # Productivity lever: partial flow-through into margin (assumption)
+        projected_margin = max(-1.0, min(1.0, projected_margin + (0.35 * prod_delta)))
+
+        projected_ebitda = round(projected_revenue * projected_margin, 2)
+
+        # Multiple: baseline average ± adjustments
+        base_multiple_avg = (
+            (base_multiple_low + base_multiple_high) / 2.0
+            if (base_multiple_low and base_multiple_high)
+            else 0.0
+        )
+
+        # Owner hours reduction improves multiple (assume 40hr baseline if unknown)
+        assumed_current_owner_hours = 40.0
+        owner_improvement = 0.0
+        if owner_hours_delta < 0:
+            owner_improvement = min(1.0, (-owner_hours_delta) / assumed_current_owner_hours)
+
+        multiple_uplift = (0.6 * owner_improvement) + (0.3 * max(0.0, prod_delta))
+        multiple_penalty = 0.4 * max(0.0, -prod_delta)
+        projected_multiple = round(max(1.5, base_multiple_avg + multiple_uplift - multiple_penalty), 2)
+
+        # Keep a reasonable spread around multiple for range
+        spread = max(
+            0.25,
+            (base_multiple_high - base_multiple_low) / 2.0
+            if base_multiple_high > base_multiple_low
+            else 0.35
+        )
+        projected_multiple_low = max(1.0, projected_multiple - spread)
+        projected_multiple_high = projected_multiple + spread
+
+        # EV range uses EBITDA if positive; otherwise fall back to tier multiples
+        from services.valuation.engine import ValuationEngine
+        engine = ValuationEngine(tenant_id)
+
+        if projected_ebitda > 0:
+            projected_ev_low = round(projected_ebitda * projected_multiple_low, 2)
+            projected_ev_high = round(projected_ebitda * projected_multiple_high, 2)
+        else:
+            applied = engine.apply_multiples(sde=0.0, ebitda=projected_ebitda, tier=base_tier)
+            projected_ev_low = float(applied["ev_low"])
+            projected_ev_high = float(applied["ev_high"])
+
+        return {
+            "projected_ebitda": projected_ebitda,
+            "projected_multiple": projected_multiple,
+            "projected_ev_low": projected_ev_low,
+            "projected_ev_high": projected_ev_high
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to simulate valuation: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/valuation/exit-readiness")
+async def get_exit_readiness(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Exit readiness snapshot (first-pass).
+
+    Response shape is optimized for the frontend ExitReadiness component.
+    """
+    try:
+        items = [
+            ("financial_statements", "Financial statements (3-5 years)"),
+            ("tax_returns", "Tax returns"),
+            ("ar_ap_aging", "AR/AP aging reports"),
+            ("asset_list", "Asset list"),
+            ("org_chart", "Org chart"),
+            ("kpi_dashboard", "KPI dashboard"),
+            ("safety_insurance", "Safety/insurance docs"),
+        ]
+
+        # Pull doc registry from DB (uploaded docs)
+        docs_res = supabase.table("exit_readiness_documents")\
+            .select("id, checklist_key, storage_bucket, storage_path, file_name, content_type, size_bytes, created_at")\
+            .eq("tenant_id", tenant_id)\
+            .order("created_at", desc=True)\
+            .execute()
+
+        uploaded_keys = set()
+        files_by_key: dict[str, list[dict]] = {}
+        for row in (docs_res.data or []):
+            key = row.get("checklist_key")
+            if not key:
+                continue
+            uploaded_keys.add(key)
+
+            bucket = row.get("storage_bucket") or "deal-room"
+            path = row.get("storage_path")
+            signed_url = None
+            if path:
+                try:
+                    signed = supabase.storage.from_(bucket).create_signed_url(path, 60 * 60)
+                    # python client may return dict-like or object-like responses
+                    signed_url = signed.get("signedURL") if isinstance(signed, dict) else getattr(signed, "signedURL", None)
+                except Exception:
+                    signed_url = None
+
+            files_by_key.setdefault(key, []).append({
+                "id": row.get("id"),
+                "file_name": row.get("file_name"),
+                "content_type": row.get("content_type"),
+                "size_bytes": row.get("size_bytes"),
+                "created_at": row.get("created_at"),
+                "storage_bucket": bucket,
+                "storage_path": path,
+                "signed_url": signed_url
+            })
+
+        checklist = []
+        uploaded_count = 0
+        for key, label in items:
+            uploaded = key in uploaded_keys
+            if uploaded:
+                uploaded_count += 1
+            checklist.append({"key": key, "label": label, "uploaded": uploaded})
+
+        completeness_pct = round((uploaded_count / len(items)) * 100) if items else 0
+
+        # Simple readiness scoring: completeness is the main driver for now.
+        readiness_score = int(completeness_pct)
+        if readiness_score >= 80:
+            status = "green"
+        elif readiness_score >= 50:
+            status = "yellow"
+        else:
+            status = "red"
+
+        return {
+            "readiness_score": readiness_score,
+            "status": status,
+            "completeness_pct": completeness_pct,
+            "checklist": checklist,
+            "files_by_key": files_by_key
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to retrieve exit readiness: {str(e)}"
+                }
+            }
+        )
+
+
+@app.post("/api/valuation/exit-readiness/upload")
+async def upload_exit_readiness_documents(
+    tenant_id: str = Depends(get_current_tenant_id),
+    checklist_key: str = Form(...),
+    files: list[UploadFile] = File(...)
+):
+    """
+    Upload due diligence documents to Supabase Storage and register them in DB.
+
+    Multipart form:
+      - checklist_key: string
+      - files: one or more files
+    """
+    try:
+        if not files:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {"code": "VALIDATION_ERROR", "message": "No files provided"}
+                }
+            )
+
+        bucket = "deal-room"
+
+        # Best-effort ensure bucket exists (requires service key privileges)
+        try:
+            supabase.storage.create_bucket(bucket, options={"public": False})
+        except Exception:
+            pass
+
+        uploaded = []
+        for f in files:
+            content = await f.read()
+            if content is None:
+                content = b""
+
+            safe_name = (f.filename or "document").replace("/", "_")
+            timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+            storage_path = f"{tenant_id}/exit-readiness/{checklist_key}/{timestamp}_{safe_name}"
+
+            # Upload into Supabase Storage
+            supabase.storage.from_(bucket).upload(
+                storage_path,
+                content,
+                file_options={
+                    "content-type": f.content_type or "application/octet-stream",
+                    "upsert": True
+                }
+            )
+
+            # Register in DB
+            supabase.table("exit_readiness_documents").insert({
+                "tenant_id": tenant_id,
+                "checklist_key": checklist_key,
+                "storage_bucket": bucket,
+                "storage_path": storage_path,
+                "file_name": f.filename or safe_name,
+                "content_type": f.content_type,
+                "size_bytes": len(content)
+            }).execute()
+
+            uploaded.append({
+                "file_name": f.filename or safe_name,
+                "storage_bucket": bucket,
+                "storage_path": storage_path
+            })
+
+        return {"success": True, "uploaded": uploaded}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to upload exit readiness documents: {str(e)}"
+                }
+            }
+        )
+
+
+@app.delete("/api/valuation/exit-readiness/files/{doc_id}")
+async def delete_exit_readiness_document(
+    doc_id: str,
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Delete a single uploaded document (storage object + DB metadata)."""
+    try:
+        row_res = supabase.table("exit_readiness_documents")\
+            .select("id, tenant_id, storage_bucket, storage_path")\
+            .eq("id", doc_id)\
+            .limit(1)\
+            .execute()
+
+        if not row_res.data:
+            raise HTTPException(
+                status_code=404,
+                detail={"success": False, "error": {"code": "NOT_FOUND", "message": "Document not found"}}
+            )
+
+        row = row_res.data[0]
+        if row.get("tenant_id") != tenant_id:
+            raise HTTPException(
+                status_code=403,
+                detail={"success": False, "error": {"code": "FORBIDDEN", "message": "Not allowed"}}
+            )
+
+        bucket = row.get("storage_bucket") or "deal-room"
+        path = row.get("storage_path")
+        if path:
+            try:
+                supabase.storage.from_(bucket).remove([path])
+            except Exception:
+                # continue to delete metadata even if storage removal fails (idempotency / drift)
+                pass
+
+        supabase.table("exit_readiness_documents")\
+            .delete()\
+            .eq("id", doc_id)\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {"code": "INTERNAL_ERROR", "message": f"Failed to delete document: {str(e)}"}
+            }
+        )
+
+@app.get("/api/valuation/roadmap")
+async def get_valuation_roadmap(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get prioritized valuation roadmap items for the tenant.
+    """
+    try:
+        res = supabase.table("roadmap_items")\
+            .select("id, driver_key, title, description, expected_impact_ev, effort_level, status, category, completed_at, created_at, updated_at")\
+            .eq("tenant_id", tenant_id)\
+            .order("expected_impact_ev", desc=True)\
+            .order("priority")\
+            .order("created_at", desc=True)\
+            .execute()
+
+        items = []
+        for row in (res.data or []):
+            items.append({
+                "id": row.get("id"),
+                "driver_key": row.get("driver_key"),
+                "title": row.get("title"),
+                "description": row.get("description"),
+                "expected_impact_ev": float(row.get("expected_impact_ev") or 0),
+                "effort_level": row.get("effort_level"),
+                "status": row.get("status"),
+                "category": row.get("category"),
+                "completed_at": row.get("completed_at"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            })
+
+        # Spec Jam due (quarterly): due if no completed "Spec Jam" since start of current calendar quarter (UTC)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        quarter_start_month = ((now.month - 1) // 3) * 3 + 1  # 1,4,7,10
+        quarter_start = datetime(now.year, quarter_start_month, 1, tzinfo=timezone.utc)
+
+        spec_jam_done_this_quarter = False
+        for it in items:
+            if (it.get("category") == "strategic") and ("spec jam" in (it.get("title") or "").lower()):
+                ca = it.get("completed_at")
+                if ca:
+                    try:
+                        dt = datetime.fromisoformat(str(ca).replace("Z", "+00:00"))
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        if dt >= quarter_start:
+                            spec_jam_done_this_quarter = True
+                            break
+                    except Exception:
+                        pass
+
+        spec_jam_due = not spec_jam_done_this_quarter
+
+        return {
+            "success": True,
+            "data": {
+                "items": items,
+                "spec_jam_due": spec_jam_due
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {"code": "INTERNAL_ERROR", "message": f"Failed to retrieve roadmap: {str(e)}"}
+            }
+        )
+
+
+@app.patch("/api/valuation/roadmap/{item_id}")
+async def update_valuation_roadmap_item(
+    item_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+    request_body: dict = Body(...)
+):
+    """
+    Update roadmap item status.
+    Body: { status: 'pending' | 'in_progress' | 'completed' }
+    """
+    try:
+        status = request_body.get("status")
+        if status not in ("pending", "in_progress", "completed"):
+            raise HTTPException(
+                status_code=400,
+                detail={"success": False, "error": {"code": "VALIDATION_ERROR", "message": "Invalid status"}}
+            )
+
+        patch = {"status": status, "updated_at": datetime.utcnow().isoformat()}
+        if status == "completed":
+            patch["completed_at"] = datetime.utcnow().isoformat()
+
+        res = supabase.table("roadmap_items")\
+            .update(patch)\
+            .eq("id", item_id)\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
+        if not res.data:
+            raise HTTPException(
+                status_code=404,
+                detail={"success": False, "error": {"code": "NOT_FOUND", "message": "Roadmap item not found"}}
+            )
+
+        return {"success": True, "data": {"item": res.data[0]}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={"success": False, "error": {"code": "INTERNAL_ERROR", "message": f"Failed to update roadmap item: {str(e)}"}}
         )
 
 # ============================================================

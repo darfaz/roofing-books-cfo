@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ScenarioSimulator } from './ScenarioSimulator'
+import { ExitReadiness } from './ExitReadiness'
+import { ValuationRoadmap } from './ValuationRoadmap'
+import { Tabs } from './ui/Tabs'
 
 interface ValuationSnapshot {
   id: string
@@ -66,6 +70,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [historicalSnapshots, setHistoricalSnapshots] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'overview' | 'scenario' | 'exit' | 'roadmap'>('overview')
 
   useEffect(() => {
     void fetchValuationData()
@@ -198,6 +203,17 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   }
 
   const avgValue = (snapshot.ev_low + snapshot.ev_high) / 2
+  const currentMultipleAvg = (snapshot.multiple_low + snapshot.multiple_high) / 2
+
+  const tabOptions = useMemo(
+    () => [
+      { key: 'overview' as const, label: 'Overview' },
+      { key: 'scenario' as const, label: 'Scenario Simulator' },
+      { key: 'exit' as const, label: 'Exit Readiness' },
+      { key: 'roadmap' as const, label: 'Roadmap' },
+    ],
+    [],
+  )
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
@@ -221,112 +237,135 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
           </div>
         </div>
 
-        {/* Valuation Meter */}
-        <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
-          <h2 className="text-xl font-semibold mb-6">Estimated Enterprise Value</h2>
-          <div className="relative h-24 bg-slate-800 rounded-lg overflow-hidden mb-6">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-4xl font-bold">{formatCurrency(avgValue)}</div>
-                <div className="text-sm text-slate-400 mt-1">
-                  {formatCurrency(snapshot.ev_low)} - {formatCurrency(snapshot.ev_high)}
-                </div>
-              </div>
-            </div>
-            <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-500 via-emerald-500 to-emerald-400 opacity-30" />
-            <div className="absolute bottom-0 left-0 w-1 h-full bg-amber-400" />
-            <div className="absolute bottom-0 right-0 w-1 h-full bg-emerald-400" />
-            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-full bg-white" />
-          </div>
+        {/* Tabs */}
+        <Tabs value={activeTab} onChange={setActiveTab} tabs={tabOptions} />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-slate-800 rounded-lg p-4">
-              <div className="text-sm text-slate-400">TTM Revenue</div>
-              <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_revenue)}</div>
-            </div>
-            <div className="bg-slate-800 rounded-lg p-4">
-              <div className="text-sm text-slate-400">TTM SDE</div>
-              <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_sde)}</div>
-            </div>
-            <div className="bg-slate-800 rounded-lg p-4">
-              <div className="text-sm text-slate-400">TTM EBITDA</div>
-              <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_ebitda)}</div>
-            </div>
-            <div className="bg-slate-800 rounded-lg p-4">
-              <div className="text-sm text-slate-400">Multiple Range</div>
-              <div className="text-xl font-bold">
-                {snapshot.multiple_low}x - {snapshot.multiple_high}x
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 pt-6 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm text-slate-400">Confidence</div>
-              <div className={`font-semibold ${getScoreColor(snapshot.confidence_score)}`}>{snapshot.confidence_score}%</div>
-            </div>
-            <div className="w-full bg-slate-800 rounded-full h-2">
-              <div className="h-2 rounded-full bg-emerald-500/20" style={{ width: `${snapshot.confidence_score}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* Driver Scorecards */}
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Value Driver Scores</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(DRIVER_LABELS).map(([key, meta]) => {
-              const score = driverScores.find((d) => d.driver_key === key)?.score ?? 0
-              const score100 = scoreTo100(score)
-              return (
-                <div key={key} className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <div className="text-3xl mb-2">{meta.icon}</div>
-                      <h3 className="font-semibold text-lg">{meta.label}</h3>
-                      <p className="text-sm text-slate-400">{meta.description}</p>
+        {activeTab === 'overview' ? (
+          <>
+            {/* Valuation Meter */}
+            <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
+              <h2 className="text-xl font-semibold mb-6">Estimated Enterprise Value</h2>
+              <div className="relative h-24 bg-slate-800 rounded-lg overflow-hidden mb-6">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-4xl font-bold">{formatCurrency(avgValue)}</div>
+                    <div className="text-sm text-slate-400 mt-1">
+                      {formatCurrency(snapshot.ev_low)} - {formatCurrency(snapshot.ev_high)}
                     </div>
-                    <div className={`text-2xl font-bold ${getScoreColor(score100)}`}>{score100}</div>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-3">
-                    <div className={`h-3 rounded-full ${getScoreBg(score100)}`} style={{ width: `${score100}%` }} />
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
+                <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-500 via-emerald-500 to-emerald-400 opacity-30" />
+                <div className="absolute bottom-0 left-0 w-1 h-full bg-amber-400" />
+                <div className="absolute bottom-0 right-0 w-1 h-full bg-emerald-400" />
+                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-full bg-white" />
+              </div>
 
-        {/* Timeline */}
-        <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
-          <h2 className="text-xl font-semibold mb-6">Valuation Timeline</h2>
-          {historicalSnapshots.length ? (
-            <div className="h-64 flex items-end gap-2">
-              {historicalSnapshots
-                .slice()
-                .reverse()
-                .map((snap) => {
-                  const v = (snap.ev_low + snap.ev_high) / 2
-                  const max = Math.max(...historicalSnapshots.map((s) => (s.ev_low + s.ev_high) / 2))
-                  const pct = max > 0 ? (v / max) * 100 : 0
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-slate-800 rounded-lg p-4">
+                  <div className="text-sm text-slate-400">TTM Revenue</div>
+                  <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_revenue)}</div>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-4">
+                  <div className="text-sm text-slate-400">TTM SDE</div>
+                  <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_sde)}</div>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-4">
+                  <div className="text-sm text-slate-400">TTM EBITDA</div>
+                  <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_ebitda)}</div>
+                </div>
+                <div className="bg-slate-800 rounded-lg p-4">
+                  <div className="text-sm text-slate-400">Multiple Range</div>
+                  <div className="text-xl font-bold">
+                    {snapshot.multiple_low}x - {snapshot.multiple_high}x
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm text-slate-400">Confidence</div>
+                  <div className={`font-semibold ${getScoreColor(snapshot.confidence_score)}`}>{snapshot.confidence_score}%</div>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2">
+                  <div className="h-2 rounded-full bg-emerald-500/20" style={{ width: `${snapshot.confidence_score}%` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Driver Scorecards */}
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Value Driver Scores</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(DRIVER_LABELS).map(([key, meta]) => {
+                  const score = driverScores.find((d) => d.driver_key === key)?.score ?? 0
+                  const score100 = scoreTo100(score)
                   return (
-                    <div key={snap.id} className="flex-1 flex flex-col items-center">
-                      <div
-                        className="w-full rounded-t bg-emerald-500/20"
-                        style={{ height: `${Math.max(8, pct)}%` }}
-                        title={`${formatDate(snap.as_of_date)}: ${formatCurrency(v)}`}
-                      />
-                      <div className="text-[10px] text-slate-500 mt-2">{formatDate(snap.as_of_date)}</div>
+                    <div key={key} className="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <div className="text-3xl mb-2">{meta.icon}</div>
+                          <h3 className="font-semibold text-lg">{meta.label}</h3>
+                          <p className="text-sm text-slate-400">{meta.description}</p>
+                        </div>
+                        <div className={`text-2xl font-bold ${getScoreColor(score100)}`}>{score100}</div>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-3">
+                        <div className={`h-3 rounded-full ${getScoreBg(score100)}`} style={{ width: `${score100}%` }} />
+                      </div>
                     </div>
                   )
                 })}
+              </div>
             </div>
-          ) : (
-            <div className="text-slate-400 text-center py-10">No historical snapshots yet.</div>
-          )}
-        </div>
+
+            {/* Timeline */}
+            <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
+              <h2 className="text-xl font-semibold mb-6">Valuation Timeline</h2>
+              {historicalSnapshots.length ? (
+                <div className="h-64 flex items-end gap-2">
+                  {historicalSnapshots
+                    .slice()
+                    .reverse()
+                    .map((snap) => {
+                      const v = (snap.ev_low + snap.ev_high) / 2
+                      const max = Math.max(...historicalSnapshots.map((s) => (s.ev_low + s.ev_high) / 2))
+                      const pct = max > 0 ? (v / max) * 100 : 0
+                      return (
+                        <div key={snap.id} className="flex-1 flex flex-col items-center">
+                          <div
+                            className="w-full rounded-t bg-emerald-500/20"
+                            style={{ height: `${Math.max(8, pct)}%` }}
+                            title={`${formatDate(snap.as_of_date)}: ${formatCurrency(v)}`}
+                          />
+                          <div className="text-[10px] text-slate-500 mt-2">{formatDate(snap.as_of_date)}</div>
+                        </div>
+                      )
+                    })}
+                </div>
+              ) : (
+                <div className="text-slate-400 text-center py-10">No historical snapshots yet.</div>
+              )}
+            </div>
+          </>
+        ) : null}
+
+        {activeTab === 'scenario' ? (
+          <ScenarioSimulator
+            accessToken={accessToken}
+            currentEbitda={snapshot.ttm_ebitda}
+            currentMultiple={Number(currentMultipleAvg.toFixed(2))}
+            currentEvLow={snapshot.ev_low}
+            currentEvHigh={snapshot.ev_high}
+          />
+        ) : null}
+
+        {activeTab === 'exit' ? <ExitReadiness accessToken={accessToken} /> : null}
+        {activeTab === 'roadmap' ? <ValuationRoadmap accessToken={accessToken} /> : null}
       </div>
     </div>
   )
 }
+
+
+
 

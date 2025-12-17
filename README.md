@@ -139,6 +139,12 @@ pytest tests/
 | `/api/cash/position` | GET | Current cash position |
 | `/api/cash/forecast` | GET | 13-week forecast |
 
+## Supabase Storage (Deal Room)
+
+- **Bucket**: create a private bucket named `deal-room`
+- **Used by**: `POST /api/valuation/exit-readiness/upload` for Exit Readiness due diligence uploads
+- **Metadata table**: `public.exit_readiness_documents`
+
 ## Environment-specific configs
 
 | Variable | Development | Production |
