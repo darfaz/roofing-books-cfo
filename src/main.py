@@ -139,20 +139,23 @@ async def qbo_callback(code: str, state: str, realmId: str):
     expires_in = tokens.get("expires_in", 3600)  # Default to 1 hour if not provided
     token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
     
-    # Store tokens in Supabase
-    result = supabase.table("tenant_integrations").upsert({
-        "tenant_id": tenant_id,
-        "provider": "quickbooks",
-        "access_token": tokens.get("access_token"),
-        "refresh_token": tokens.get("refresh_token"),
-        "token_expires_at": token_expires_at.isoformat(),
-        "realm_id": realmId,
-        "is_active": True,
-        "metadata": {
-            "token_type": tokens.get("token_type"),
-            "expires_in": expires_in
-        }
-    }).execute()
+    # Store tokens in Supabase (upsert on tenant_id + provider)
+    result = supabase.table("tenant_integrations").upsert(
+        {
+            "tenant_id": tenant_id,
+            "provider": "quickbooks",
+            "access_token": tokens.get("access_token"),
+            "refresh_token": tokens.get("refresh_token"),
+            "token_expires_at": token_expires_at.isoformat(),
+            "realm_id": realmId,
+            "is_active": True,
+            "metadata": {
+                "token_type": tokens.get("token_type"),
+                "expires_in": expires_in
+            }
+        },
+        on_conflict="tenant_id,provider"
+    ).execute()
     
     return {
         "status": "connected",
