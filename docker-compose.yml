@@ -3,24 +3,22 @@
 #   docker-compose up                    # Start all services
 #   docker-compose up api dashboard      # Start only API and dashboard
 #   docker-compose --profile tools up    # Include pgAdmin
-
-
 services:
-  # Nginx - Serves marketing pages + reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: crewcfo-nginx
-    ports:
-      - "80:80"
-    volumes:
-      - ./marketing:/usr/share/nginx/html:ro
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api
-      - dashboard
-    networks:
-      - crewcfo-network
-    restart: unless-stopped
+  # Nginx - DISABLED (using system nginx for SSL)
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: crewcfo-nginx
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./marketing:/usr/share/nginx/html:ro
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - api
+  #     - dashboard
+  #   networks:
+  #     - crewcfo-network
+  #   restart: unless-stopped
 
   # FastAPI Backend
   api:
@@ -45,7 +43,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Note: API uses Supabase by default, postgres is optional (use --profile db)
     networks:
       - crewcfo-network
     restart: unless-stopped
@@ -58,7 +55,7 @@ services:
       target: development
     container_name: crewcfo-dashboard
     ports:
-      - "8503:8503"  # Updated to match your current port
+      - "8503:8503"
     env_file:
       - .env
     environment:
@@ -79,11 +76,7 @@ services:
       - crewcfo-network
     restart: unless-stopped
 
-  # Local PostgreSQL (optional - for offline dev/testing)
-  # Note: You're using Supabase in production, but local DB is useful for:
-  # - Testing without internet
-  # - Development with local data
-  # - CI/CD pipelines
+  # Local PostgreSQL (optional)
   postgres:
     image: postgres:15-alpine
     container_name: crewcfo-db
@@ -105,9 +98,9 @@ services:
       - crewcfo-network
     restart: unless-stopped
     profiles:
-      - db  # Only starts with: docker-compose --profile db up
+      - db
 
-  # pgAdmin (optional - database GUI)
+  # pgAdmin (optional)
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: crewcfo-pgadmin
@@ -123,7 +116,7 @@ services:
     networks:
       - crewcfo-network
     profiles:
-      - tools  # Only starts with: docker-compose --profile tools up
+      - tools
     restart: unless-stopped
 
 volumes:

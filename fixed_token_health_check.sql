@@ -33,3 +33,7 @@ LEFT JOIN tenants t ON ti.tenant_id = t.id
 WHERE ti.provider = 'quickbooks'
 ORDER BY ti.created_at DESC;
 
+
+
+
+

@@ -333,3 +333,7 @@ gcloud run deploy crewcfo-api --image gcr.io/PROJECT-ID/crewcfo-api --platform m
 - [ ] Configure reverse proxy (nginx/traefik)
 - [ ] Set up SSL/TLS certificates
 
+
+
+
+

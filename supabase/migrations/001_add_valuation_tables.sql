@@ -163,3 +163,7 @@ COMMENT ON COLUMN driver_scores.evidence_refs IS 'Array of evidence IDs supporti
 COMMENT ON TABLE roadmap_items IS 'Actionable improvement tasks with EV impact estimates and automation tracking';
 COMMENT ON COLUMN roadmap_items.expected_impact_ev IS 'Expected enterprise value increase from completing this task';
 COMMENT ON COLUMN roadmap_items.human_approval_required IS 'TRUE for tasks with EV impact > $5,000 per Books OS Constitution';
+
+
+
+

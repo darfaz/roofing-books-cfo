@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed:valuation": "DOTENV_CONFIG_PATH=../.env tsx scripts/seed-valuation.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.88.0",
@@ -27,6 +28,8 @@
     "globals": "^16.5.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "dotenv": "^16.6.1",
+    "tsx": "^4.20.5",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"

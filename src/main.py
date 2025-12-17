@@ -23,7 +23,7 @@ supabase: Client = create_client(
 )
 
 # Auth helper (Supabase Auth -> tenant context)
-from utils.auth import get_current_tenant_id
+from src.utils.auth import get_current_tenant_id
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -193,8 +193,8 @@ async def classify_transaction(transaction_id: str, account_id: str = None, job_
     If account_id is provided, manually classify.
     If not provided, use AI classification agent.
     """
-    from services.qbo.classification_workflow import ClassificationWorkflow
-    
+    from src.services.qbo.classification_workflow import ClassificationWorkflow
+
     # Get tenant_id from transaction
     txn_result = supabase.table("transactions")\
         .select("tenant_id")\
@@ -421,9 +421,9 @@ async def sync_qbo_transactions(
     Returns:
         Sync results with count and status
     """
-    from services.qbo.sync import QBOSyncService
-    from services.qbo.classification_workflow import ClassificationWorkflow
-    
+    from src.services.qbo.sync import QBOSyncService
+    from src.services.qbo.classification_workflow import ClassificationWorkflow
+
     try:
         sync_service = QBOSyncService(tenant_id)
         
@@ -465,8 +465,8 @@ async def classify_transactions_batch(
     Returns:
         Classification results
     """
-    from services.qbo.classification_workflow import ClassificationWorkflow
-    
+    from src.services.qbo.classification_workflow import ClassificationWorkflow
+
     try:
         workflow = ClassificationWorkflow(tenant_id)
         result = workflow.classify_unclassified_transactions(
@@ -625,7 +625,7 @@ async def create_valuation_snapshot(
             snapshot_date = date.today()
         
         # Use ValuationEngine to calculate valuation
-        from services.valuation.engine import ValuationEngine
+        from src.services.valuation.engine import ValuationEngine
         import time
         
         start_time = time.time()
@@ -1036,7 +1036,7 @@ async def simulate_valuation(
         projected_multiple_high = projected_multiple + spread
 
         # EV range uses EBITDA if positive; otherwise fall back to tier multiples
-        from services.valuation.engine import ValuationEngine
+        from src.services.valuation.engine import ValuationEngine
         engine = ValuationEngine(tenant_id)
 
         if projected_ebitda > 0:

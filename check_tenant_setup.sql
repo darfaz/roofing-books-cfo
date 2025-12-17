@@ -27,3 +27,7 @@ LEFT JOIN tenant_integrations ti
     AND ti.provider = 'quickbooks'
 ORDER BY t.created_at DESC;
 
+
+
+
+
