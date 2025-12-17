@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ScenarioSimulator } from './ScenarioSimulator'
 import { ExitReadiness } from './ExitReadiness'
 import { ValuationRoadmap } from './ValuationRoadmap'
 import { Tabs } from './ui/Tabs'
+import { GaugeMeter } from './ui/GaugeMeter'
+import { AnimatedCurrency, AnimatedPercentage } from './ui/AnimatedNumber'
+import { RadarChart } from './ui/RadarChart'
+import { GlassCard, MetricCard } from './ui/GlassCard'
+import { DriverScoreCard } from './ui/DriverScoreCard'
+import { Sparkline } from './ui/Sparkline'
 
 interface ValuationSnapshot {
   id: string
@@ -23,7 +30,7 @@ interface ValuationSnapshot {
 interface DriverScore {
   id: string
   driver_key: string
-  score: number // 0-5 in current API implementation (converted)
+  score: number
   confidence: number
   computed_by: string
   as_of_date: string
@@ -121,89 +128,20 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const formatDate = (dateString: string): string =>
     new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 
-  const getTierColor = (tier: string): string => {
+  const getTierConfig = (tier: string) => {
     switch (tier) {
       case 'above_avg':
-        return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+        return { label: 'Above Average', color: 'emerald', variant: 'success' as const }
       case 'avg':
-        return 'text-blue-400 bg-blue-500/10 border-blue-500/30'
+        return { label: 'Average', color: 'blue', variant: 'info' as const }
       case 'below_avg':
-        return 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+        return { label: 'Below Average', color: 'amber', variant: 'warning' as const }
       default:
-        return 'text-slate-400 bg-slate-500/10 border-slate-500/30'
-    }
-  }
-
-  const getTierLabel = (tier: string): string => {
-    switch (tier) {
-      case 'above_avg':
-        return 'Above Average'
-      case 'avg':
-        return 'Average'
-      case 'below_avg':
-        return 'Below Average'
-      default:
-        return tier
+        return { label: tier, color: 'slate', variant: 'default' as const }
     }
   }
 
   const scoreTo100 = (score0to5: number) => Math.round((score0to5 / 5) * 100)
-
-  const getScoreColor = (score100: number): string => {
-    if (score100 >= 80) return 'text-emerald-400'
-    if (score100 >= 60) return 'text-blue-400'
-    if (score100 >= 40) return 'text-amber-400'
-    return 'text-red-400'
-  }
-
-  const getScoreBg = (score100: number): string => {
-    if (score100 >= 80) return 'bg-emerald-500/20'
-    if (score100 >= 60) return 'bg-blue-500/20'
-    if (score100 >= 40) return 'bg-amber-500/20'
-    return 'bg-red-500/20'
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-center h-64 text-slate-400">
-          Loading valuation…
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-300">
-            {error}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!snapshot) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white p-6">
-        <div className="max-w-7xl mx-auto bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
-          <h2 className="text-2xl font-bold mb-2">No valuation snapshot yet</h2>
-          <p className="text-slate-400 mb-6">Create a snapshot via the API to populate the dashboard.</p>
-          <button
-            onClick={() => void fetchValuationData()}
-            className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-6 py-3 rounded-lg transition"
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  const avgValue = (snapshot.ev_low + snapshot.ev_high) / 2
-  const currentMultipleAvg = (snapshot.multiple_low + snapshot.multiple_high) / 2
 
   const tabOptions = useMemo(
     () => [
@@ -215,157 +153,324 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
     [],
   )
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Valuation Dashboard</h1>
-            <p className="text-slate-400 mt-1">As of {formatDate(snapshot.as_of_date)}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className={`px-4 py-2 rounded-lg border ${getTierColor(snapshot.tier)}`}>
-              <div className="text-xs text-slate-400">Tier</div>
-              <div className="font-semibold">{getTierLabel(snapshot.tier)}</div>
+  // Prepare radar chart data
+  const radarData = useMemo(() => {
+    return Object.entries(DRIVER_LABELS).map(([key, meta]) => {
+      const score = driverScores.find((d) => d.driver_key === key)?.score ?? 0
+      return {
+        subject: meta.label.split(' ')[0],
+        value: scoreTo100(score),
+        fullMark: 100,
+        icon: meta.icon,
+      }
+    })
+  }, [driverScores])
+
+  // Prepare sparkline data from historical snapshots
+  const sparklineData = useMemo(() => {
+    return historicalSnapshots
+      .slice()
+      .reverse()
+      .map((snap) => ({
+        value: (snap.ev_low + snap.ev_high) / 2,
+        label: formatDate(snap.as_of_date),
+      }))
+  }, [historicalSnapshots])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-6">
+        <div className="max-w-7xl mx-auto flex items-center justify-center h-64">
+          <motion.div
+            className="flex items-center gap-3 text-slate-400"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <motion.div
+              className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            />
+            Loading valuation data...
+          </motion.div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-6">
+        <div className="max-w-7xl mx-auto">
+          <GlassCard variant="danger">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <div className="font-semibold text-red-300">Error Loading Data</div>
+                <div className="text-sm text-red-400/80">{error}</div>
+              </div>
             </div>
-            <button
+          </GlassCard>
+        </div>
+      </div>
+    )
+  }
+
+  if (!snapshot) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-6">
+        <div className="max-w-7xl mx-auto">
+          <GlassCard padding="lg" className="text-center">
+            <div className="text-5xl mb-4">📊</div>
+            <h2 className="text-2xl font-bold mb-2">No Valuation Snapshot Yet</h2>
+            <p className="text-slate-400 mb-6">Create a snapshot via the API to populate the dashboard.</p>
+            <motion.button
               onClick={() => void fetchValuationData()}
-              className="bg-slate-800 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded-lg transition"
+              className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-6 py-3 rounded-lg transition"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               Refresh
-            </button>
-          </div>
+            </motion.button>
+          </GlassCard>
         </div>
+      </div>
+    )
+  }
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onChange={setActiveTab} tabs={tabOptions} />
+  const avgValue = (snapshot.ev_low + snapshot.ev_high) / 2
+  const currentMultipleAvg = (snapshot.multiple_low + snapshot.multiple_high) / 2
+  const tierConfig = getTierConfig(snapshot.tier)
 
-        {activeTab === 'overview' ? (
-          <>
-            {/* Valuation Meter */}
-            <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
-              <h2 className="text-xl font-semibold mb-6">Estimated Enterprise Value</h2>
-              <div className="relative h-24 bg-slate-800 rounded-lg overflow-hidden mb-6">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="text-4xl font-bold">{formatCurrency(avgValue)}</div>
-                    <div className="text-sm text-slate-400 mt-1">
-                      {formatCurrency(snapshot.ev_low)} - {formatCurrency(snapshot.ev_high)}
-                    </div>
-                  </div>
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-500 via-emerald-500 to-emerald-400 opacity-30" />
-                <div className="absolute bottom-0 left-0 w-1 h-full bg-amber-400" />
-                <div className="absolute bottom-0 right-0 w-1 h-full bg-emerald-400" />
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-full bg-white" />
-              </div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+      {/* Background decoration */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-emerald-500/5 rounded-full blur-3xl" />
+        <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-blue-500/5 rounded-full blur-3xl" />
+      </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-slate-800 rounded-lg p-4">
-                  <div className="text-sm text-slate-400">TTM Revenue</div>
-                  <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_revenue)}</div>
-                </div>
-                <div className="bg-slate-800 rounded-lg p-4">
-                  <div className="text-sm text-slate-400">TTM SDE</div>
-                  <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_sde)}</div>
-                </div>
-                <div className="bg-slate-800 rounded-lg p-4">
-                  <div className="text-sm text-slate-400">TTM EBITDA</div>
-                  <div className="text-xl font-bold">{formatCurrency(snapshot.ttm_ebitda)}</div>
-                </div>
-                <div className="bg-slate-800 rounded-lg p-4">
-                  <div className="text-sm text-slate-400">Multiple Range</div>
-                  <div className="text-xl font-bold">
-                    {snapshot.multiple_low}x - {snapshot.multiple_high}x
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-6 border-t border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm text-slate-400">Confidence</div>
-                  <div className={`font-semibold ${getScoreColor(snapshot.confidence_score)}`}>{snapshot.confidence_score}%</div>
-                </div>
-                <div className="w-full bg-slate-800 rounded-full h-2">
-                  <div className="h-2 rounded-full bg-emerald-500/20" style={{ width: `${snapshot.confidence_score}%` }} />
-                </div>
-              </div>
-            </div>
-
-            {/* Driver Scorecards */}
+      <div className="relative p-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Header */}
+          <motion.div
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
             <div>
-              <h2 className="text-xl font-semibold mb-4">Value Driver Scores</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(DRIVER_LABELS).map(([key, meta]) => {
-                  const score = driverScores.find((d) => d.driver_key === key)?.score ?? 0
-                  const score100 = scoreTo100(score)
-                  return (
-                    <div key={key} className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <div className="text-3xl mb-2">{meta.icon}</div>
-                          <h3 className="font-semibold text-lg">{meta.label}</h3>
-                          <p className="text-sm text-slate-400">{meta.description}</p>
-                        </div>
-                        <div className={`text-2xl font-bold ${getScoreColor(score100)}`}>{score100}</div>
-                      </div>
-                      <div className="w-full bg-slate-800 rounded-full h-3">
-                        <div className={`h-3 rounded-full ${getScoreBg(score100)}`} style={{ width: `${score100}%` }} />
-                      </div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                Valuation Dashboard
+              </h1>
+              <p className="text-slate-400 mt-1">As of {formatDate(snapshot.as_of_date)}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <GlassCard variant={tierConfig.variant} padding="sm" hover={false}>
+                <div className="text-xs text-slate-400">Tier</div>
+                <div className="font-semibold">{tierConfig.label}</div>
+              </GlassCard>
+              <motion.button
+                onClick={() => void fetchValuationData()}
+                className="bg-slate-800 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded-lg transition border border-slate-700"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Refresh
+              </motion.button>
+            </div>
+          </motion.div>
+
+          {/* Tabs */}
+          <Tabs value={activeTab} onChange={setActiveTab} tabs={tabOptions} />
+
+          <AnimatePresence mode="wait">
+            {activeTab === 'overview' && (
+              <motion.div
+                key="overview"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-6"
+              >
+                {/* Main EV Display */}
+                <GlassCard padding="lg" glow>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <div className="flex flex-col items-center">
+                      <h2 className="text-xl font-semibold mb-6 text-slate-300">Enterprise Value</h2>
+                      <GaugeMeter
+                        value={avgValue}
+                        min={snapshot.ev_low * 0.5}
+                        max={snapshot.ev_high * 1.5}
+                        label={`${formatCurrency(snapshot.ev_low)} - ${formatCurrency(snapshot.ev_high)}`}
+                        formatValue={formatCurrency}
+                        size="lg"
+                      />
                     </div>
-                  )
-                })}
-              </div>
-            </div>
 
-            {/* Timeline */}
-            <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
-              <h2 className="text-xl font-semibold mb-6">Valuation Timeline</h2>
-              {historicalSnapshots.length ? (
-                <div className="h-64 flex items-end gap-2">
-                  {historicalSnapshots
-                    .slice()
-                    .reverse()
-                    .map((snap) => {
-                      const v = (snap.ev_low + snap.ev_high) / 2
-                      const max = Math.max(...historicalSnapshots.map((s) => (s.ev_low + s.ev_high) / 2))
-                      const pct = max > 0 ? (v / max) * 100 : 0
-                      return (
-                        <div key={snap.id} className="flex-1 flex flex-col items-center">
-                          <div
-                            className="w-full rounded-t bg-emerald-500/20"
-                            style={{ height: `${Math.max(8, pct)}%` }}
-                            title={`${formatDate(snap.as_of_date)}: ${formatCurrency(v)}`}
-                          />
-                          <div className="text-[10px] text-slate-500 mt-2">{formatDate(snap.as_of_date)}</div>
+                    <div className="space-y-4">
+                      {/* Key Metrics */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <MetricCard
+                          label="TTM Revenue"
+                          value={<AnimatedCurrency value={snapshot.ttm_revenue} />}
+                          icon="💰"
+                        />
+                        <MetricCard
+                          label="TTM EBITDA"
+                          value={<AnimatedCurrency value={snapshot.ttm_ebitda} />}
+                          icon="📈"
+                        />
+                        <MetricCard
+                          label="TTM SDE"
+                          value={<AnimatedCurrency value={snapshot.ttm_sde} />}
+                          icon="🎯"
+                        />
+                        <MetricCard
+                          label="Multiple"
+                          value={`${snapshot.multiple_low}x - ${snapshot.multiple_high}x`}
+                          icon="✖️"
+                        />
+                      </div>
+
+                      {/* Confidence */}
+                      <GlassCard padding="sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-slate-400">Confidence Score</span>
+                          <span className="font-bold text-emerald-400">
+                            <AnimatedPercentage value={snapshot.confidence_score} />
+                          </span>
                         </div>
-                      )
-                    })}
+                        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                          <motion.div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${snapshot.confidence_score}%` }}
+                            transition={{ duration: 1, ease: 'easeOut' }}
+                          />
+                        </div>
+                      </GlassCard>
+                    </div>
+                  </div>
+                </GlassCard>
+
+                {/* Driver Scores Section */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-semibold">Value Driver Scores</h2>
+                    <span className="text-sm text-slate-400">6 key drivers analyzed</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Radar Chart */}
+                    <GlassCard className="lg:col-span-1" padding="md">
+                      <h3 className="text-sm font-medium text-slate-400 mb-4 text-center">Driver Overview</h3>
+                      <div className="h-64">
+                        <RadarChart data={radarData} color="#10b981" />
+                      </div>
+                    </GlassCard>
+
+                    {/* Driver Cards */}
+                    <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {Object.entries(DRIVER_LABELS).map(([key, meta], index) => {
+                        const score = driverScores.find((d) => d.driver_key === key)?.score ?? 0
+                        return (
+                          <DriverScoreCard
+                            key={key}
+                            icon={meta.icon}
+                            label={meta.label}
+                            description={meta.description}
+                            score={scoreTo100(score)}
+                            delay={index * 0.1}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="text-slate-400 text-center py-10">No historical snapshots yet.</div>
-              )}
-            </div>
-          </>
-        ) : null}
 
-        {activeTab === 'scenario' ? (
-          <ScenarioSimulator
-            accessToken={accessToken}
-            currentEbitda={snapshot.ttm_ebitda}
-            currentMultiple={Number(currentMultipleAvg.toFixed(2))}
-            currentEvLow={snapshot.ev_low}
-            currentEvHigh={snapshot.ev_high}
-          />
-        ) : null}
+                {/* Timeline / Historical Chart */}
+                <GlassCard padding="lg">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-semibold">Valuation Timeline</h2>
+                      <p className="text-sm text-slate-400 mt-1">Track your value growth over time</p>
+                    </div>
+                    {sparklineData.length > 1 && (
+                      <div className="text-right">
+                        <div className="text-sm text-slate-400">Latest</div>
+                        <div className="text-lg font-bold text-emerald-400">
+                          {formatCurrency(sparklineData[sparklineData.length - 1]?.value || 0)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-        {activeTab === 'exit' ? <ExitReadiness accessToken={accessToken} /> : null}
-        {activeTab === 'roadmap' ? <ValuationRoadmap accessToken={accessToken} /> : null}
+                  {sparklineData.length > 0 ? (
+                    <div className="h-48">
+                      <Sparkline data={sparklineData} color="#10b981" height={192} />
+                    </div>
+                  ) : (
+                    <div className="h-48 flex items-center justify-center text-slate-500">
+                      No historical data available yet
+                    </div>
+                  )}
+
+                  {/* Timeline dots */}
+                  {sparklineData.length > 0 && (
+                    <div className="flex justify-between mt-4 px-2">
+                      {sparklineData.map((point, i) => (
+                        <div key={i} className="text-center">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full mx-auto mb-1" />
+                          <div className="text-[10px] text-slate-500">{point.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </GlassCard>
+              </motion.div>
+            )}
+
+            {activeTab === 'scenario' && (
+              <motion.div
+                key="scenario"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <ScenarioSimulator
+                  accessToken={accessToken}
+                  currentEbitda={snapshot.ttm_ebitda}
+                  currentMultiple={Number(currentMultipleAvg.toFixed(2))}
+                  currentEvLow={snapshot.ev_low}
+                  currentEvHigh={snapshot.ev_high}
+                />
+              </motion.div>
+            )}
+
+            {activeTab === 'exit' && (
+              <motion.div
+                key="exit"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <ExitReadiness accessToken={accessToken} />
+              </motion.div>
+            )}
+
+            {activeTab === 'roadmap' && (
+              <motion.div
+                key="roadmap"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <ValuationRoadmap accessToken={accessToken} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   )
 }
-
-
-
-
