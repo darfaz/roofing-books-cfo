@@ -11,6 +11,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from gotrue.errors import AuthApiError
 
 # Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -19,6 +20,105 @@ from services.qbo.client import QBOClient
 
 # Load environment
 load_dotenv()
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def get_auth_client():
+    """Get Supabase client for auth (uses anon key)"""
+    return create_client(
+        os.getenv("SUPABASE_URL", ""),
+        os.getenv("SUPABASE_ANON_KEY", "")
+    )
+
+def login_form():
+    """Show login form and handle authentication"""
+    st.markdown("""
+    <style>
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 40px;
+            background: #0f172a;
+            border-radius: 16px;
+            border: 1px solid #1e293b;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-header h1 {
+            color: white;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .login-header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+        <div class="login-header">
+            <div style="font-size: 48px; margin-bottom: 16px;">🏠</div>
+            <h1>CrewCFO</h1>
+            <p>Sign in to your dashboard</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.form("login_form"):
+            email = st.text_input("Email", placeholder="you@company.com")
+            password = st.text_input("Password", type="password", placeholder="••••••••")
+            submit = st.form_submit_button("Sign In", use_container_width=True)
+
+            if submit:
+                if not email or not password:
+                    st.error("Please enter both email and password")
+                    return None
+
+                try:
+                    auth_client = get_auth_client()
+                    response = auth_client.auth.sign_in_with_password({
+                        "email": email,
+                        "password": password
+                    })
+
+                    if response.user:
+                        # Store session in streamlit state
+                        st.session_state["user"] = response.user
+                        st.session_state["access_token"] = response.session.access_token
+                        st.session_state["tenant_id"] = response.user.user_metadata.get("tenant_id")
+                        st.rerun()
+
+                except AuthApiError as e:
+                    st.error(f"Login failed: {str(e)}")
+                except Exception as e:
+                    st.error(f"An error occurred: {str(e)}")
+
+        st.markdown("""
+        <div style="text-align: center; margin-top: 20px; color: #64748b; font-size: 12px;">
+            <a href="https://crewcfo.com" style="color: #10b981; text-decoration: none;">← Back to CrewCFO.com</a>
+        </div>
+        """, unsafe_allow_html=True)
+
+    return None
+
+def check_auth():
+    """Check if user is authenticated, return tenant_id or None"""
+    if "user" in st.session_state and st.session_state["user"]:
+        return st.session_state.get("tenant_id")
+    return None
+
+def logout():
+    """Clear session and logout"""
+    for key in ["user", "access_token", "tenant_id"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
 
 # Page config
 st.set_page_config(
@@ -524,20 +624,37 @@ def get_mock_data():
 # ============================================================
 
 def main():
-    # Get tenant_id - in production, this would come from auth
-    # For now, use a default or check for tenant in Supabase
-    tenant_id = os.getenv("TENANT_ID", "demo")
-    
+    # Check authentication first
+    tenant_id = check_auth()
+
+    if not tenant_id:
+        # Show login form if not authenticated
+        login_form()
+        return
+
     # Check if QBO is connected
     use_qbo = True
+    qbo_error_msg = None
     try:
         qbo_client = get_qbo_client(tenant_id)
         if qbo_client is None:
             use_qbo = False
-            st.warning("⚠️ QBO not connected. Using mock data. Please connect QBO in settings.")
+            qbo_error_msg = "QBO not connected"
     except Exception as e:
         use_qbo = False
-        st.warning(f"⚠️ QBO connection error: {str(e)}. Using mock data.")
+        qbo_error_msg = str(e)
+
+    # Show QBO connection status/button at top
+    if not use_qbo or qbo_error_msg:
+        qbo_col1, qbo_col2 = st.columns([4, 1])
+        with qbo_col1:
+            if "token expired" in qbo_error_msg.lower() if qbo_error_msg else False:
+                st.warning("QuickBooks token expired. Please reconnect to continue syncing.")
+            else:
+                st.warning(f"QuickBooks not connected. {qbo_error_msg or 'Using demo data.'}")
+        with qbo_col2:
+            qbo_connect_url = f"https://crewcfo.com/auth/qbo/connect?tenant_id={tenant_id}"
+            st.link_button("Connect QuickBooks", qbo_connect_url, type="primary")
     
     if use_qbo:
         # Fetch from QBO
@@ -574,14 +691,29 @@ def main():
         forecast = data["forecast"]
         jobs = data["jobs"]
     
-    # Header with CrewCFO branding
-    st.markdown("""
-    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-        <span style="font-size: 2rem;">:house:</span>
-        <h1 style="margin: 0; font-size: 2rem; font-weight: 700; color: white;">CrewCFO</h1>
-    </div>
-    """, unsafe_allow_html=True)
-    st.caption(f"Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    # Header with CrewCFO branding and logout
+    header_cols = st.columns([6, 1, 1, 1])
+    with header_cols[0]:
+        st.markdown("""
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+            <span style="font-size: 2rem;">🏠</span>
+            <h1 style="margin: 0; font-size: 2rem; font-weight: 700; color: white;">CrewCFO</h1>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(f"Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    with header_cols[1]:
+        user = st.session_state.get("user")
+        if user:
+            st.caption(f"📧 {user.email[:20]}...")
+    with header_cols[2]:
+        if st.button("🔄 Refresh", type="secondary", help="Clear cache and refresh data"):
+            # Clear all cached data
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
+    with header_cols[3]:
+        if st.button("Logout", type="secondary"):
+            logout()
     
     # ========================================
     # Health Banner

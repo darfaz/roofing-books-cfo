@@ -31,9 +31,7 @@ class QBOClient:
         
     def _get_credentials(self) -> tuple[str, str]:
         """Get access token and realm_id from Supabase, refreshing if expired"""
-        if self._access_token and self._realm_id:
-            return self._access_token, self._realm_id
-        
+        # Always fetch from database to check expiration (don't rely on cached token)
         result = self.supabase.table("tenant_integrations")\
             .select("access_token, realm_id, token_expires_at, refresh_token, metadata")\
             .eq("tenant_id", self.tenant_id)\
