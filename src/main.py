@@ -1415,6 +1415,446 @@ async def update_valuation_roadmap_item(
             detail={"success": False, "error": {"code": "INTERNAL_ERROR", "message": f"Failed to update roadmap item: {str(e)}"}}
         )
 
+
+# ============================================================
+# VALUATION SHOCK REPORT API
+# ============================================================
+
+@app.post("/api/valuation/shock-report")
+async def generate_shock_report(
+    tenant_id: str = Depends(get_current_tenant_id),
+    request_body: dict = Body(default={})
+):
+    """
+    Generate a Valuation Shock Report showing the gap between
+    owner expectations and buyer reality.
+
+    This is the core conversion flow:
+    1. Pulls QBO data
+    2. Calculates reported vs defensible EBITDA
+    3. Applies tier-based multiple penalties
+    4. Shows the "shock" value gap
+    5. Teases value unlocks (paid feature)
+
+    Request body (optional):
+        reported_revenue: Owner's stated revenue (defaults to QBO TTM)
+        reported_ebitda: Owner's stated EBITDA (defaults to QBO calculated)
+        expected_multiple: Owner's expected multiple (default: 5.0)
+        owner_compensation: Owner's annual compensation (for add-back analysis)
+        claimed_addbacks: List of claimed add-backs for analysis
+
+    Returns:
+        Complete shock report with gap analysis and recovery roadmap
+    """
+    import time
+    from src.services.valuation.shock_report import ShockReportEngine
+
+    try:
+        start_time = time.time()
+
+        # Parse optional overrides from request body
+        overrides = {}
+        if request_body.get("reported_revenue"):
+            overrides["reported_revenue"] = float(request_body["reported_revenue"])
+        if request_body.get("reported_ebitda"):
+            overrides["reported_ebitda"] = float(request_body["reported_ebitda"])
+        if request_body.get("expected_multiple"):
+            overrides["expected_multiple"] = float(request_body["expected_multiple"])
+        if request_body.get("owner_compensation"):
+            overrides["owner_compensation"] = float(request_body["owner_compensation"])
+        if request_body.get("claimed_addbacks"):
+            overrides["claimed_addbacks"] = request_body["claimed_addbacks"]
+
+        # Generate the shock report
+        engine = ShockReportEngine(tenant_id)
+        report = engine.generate_shock_report(**overrides)
+
+        processing_time_ms = int((time.time() - start_time) * 1000)
+
+        # Track analytics event
+        try:
+            supabase.table("shock_report_analytics").insert({
+                "tenant_id": tenant_id,
+                "shock_report_id": report.get("report_id"),
+                "event_type": "report_generated"
+            }).execute()
+        except Exception:
+            pass  # Don't fail on analytics
+
+        return {
+            "success": True,
+            "data": {
+                "report": report,
+                "processing_time_ms": processing_time_ms
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": str(e)
+                }
+            }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to generate shock report: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/valuation/shock-report/latest")
+async def get_latest_shock_report(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get the most recent shock report for this tenant.
+
+    Returns the full report with all adjustments, penalties, and value unlocks.
+    """
+    try:
+        # Get latest shock report
+        result = supabase.table("valuation_shock_reports")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .order("generated_at", desc=True)\
+            .limit(1)\
+            .execute()
+
+        if not result.data:
+            return {
+                "success": False,
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "No shock report found. Generate one first."
+                }
+            }
+
+        report = result.data[0]
+
+        # Get related adjustments
+        adjustments_result = supabase.table("ebitda_adjustments")\
+            .select("*")\
+            .eq("shock_report_id", report["id"])\
+            .order("amount", desc=True)\
+            .execute()
+
+        # Get related penalties
+        penalties_result = supabase.table("multiple_penalties")\
+            .select("*")\
+            .eq("shock_report_id", report["id"])\
+            .order("penalty_amount")\
+            .execute()
+
+        # Get value unlocks
+        unlocks_result = supabase.table("value_unlocks")\
+            .select("*")\
+            .eq("shock_report_id", report["id"])\
+            .order("priority_rank")\
+            .execute()
+
+        # Track view event
+        try:
+            supabase.table("shock_report_analytics").insert({
+                "tenant_id": tenant_id,
+                "shock_report_id": report["id"],
+                "event_type": "report_viewed"
+            }).execute()
+        except Exception:
+            pass
+
+        # Format response
+        return {
+            "success": True,
+            "data": {
+                "report": {
+                    "id": report["id"],
+                    "generated_at": report["generated_at"],
+
+                    # Owner's view (the dream)
+                    "owner_view": {
+                        "revenue": float(report.get("reported_revenue") or 0),
+                        "ebitda": float(report.get("reported_ebitda") or 0),
+                        "owner_comp": float(report.get("reported_owner_comp") or 0),
+                        "addbacks": float(report.get("reported_addbacks") or 0),
+                        "expected_multiple": float(report.get("expected_multiple") or 5.0),
+                        "expected_valuation": float(report.get("expected_valuation") or 0)
+                    },
+
+                    # Buyer's view (the reality)
+                    "buyer_view": {
+                        "defensible_ebitda": float(report.get("defensible_ebitda") or 0),
+                        "defensible_sde": float(report.get("defensible_sde") or 0),
+                        "multiple_low": float(report.get("buyer_multiple_low") or 2.5),
+                        "multiple_high": float(report.get("buyer_multiple_high") or 3.5),
+                        "valuation_low": float(report.get("buyer_valuation_low") or 0),
+                        "valuation_high": float(report.get("buyer_valuation_high") or 0)
+                    },
+
+                    # The gap (the shock)
+                    "gap_analysis": {
+                        "ebitda_haircut": float(report.get("ebitda_haircut") or 0),
+                        "multiple_penalty": float(report.get("multiple_penalty") or 0),
+                        "value_gap": float(report.get("value_gap") or 0),
+                        "value_gap_percentage": float(report.get("value_gap_percentage") or 0)
+                    },
+
+                    # Tier and confidence
+                    "tier": report.get("tier") or "below_avg",
+                    "confidence_score": report.get("confidence_score") or 0,
+
+                    # Data quality
+                    "data_quality": {
+                        "qbo_data_range_start": report.get("qbo_data_range_start"),
+                        "qbo_data_range_end": report.get("qbo_data_range_end"),
+                        "transaction_count": report.get("transaction_count") or 0,
+                        "invoice_count": report.get("invoice_count") or 0,
+                        "expense_count": report.get("expense_count") or 0
+                    },
+
+                    # Recovery potential
+                    "total_recoverable_value": float(report.get("total_recoverable_value") or 0)
+                },
+
+                # Detailed breakdowns
+                "ebitda_adjustments": [
+                    {
+                        "id": adj["id"],
+                        "type": adj["adjustment_type"],
+                        "category": adj["category"],
+                        "description": adj["description"],
+                        "amount": float(adj["amount"]),
+                        "accepted_amount": float(adj.get("accepted_amount") or 0),
+                        "buyer_concern": adj.get("buyer_concern"),
+                        "rejection_reason": adj.get("rejection_reason"),
+                        "is_recoverable": adj.get("is_recoverable", True),
+                        "remediation_action": adj.get("remediation_action"),
+                        "remediation_effort": adj.get("remediation_effort"),
+                        "remediation_impact": float(adj.get("remediation_impact") or 0)
+                    }
+                    for adj in (adjustments_result.data or [])
+                ],
+
+                "multiple_penalties": [
+                    {
+                        "id": pen["id"],
+                        "driver_key": pen["driver_key"],
+                        "penalty_amount": float(pen["penalty_amount"]),
+                        "driver_score": pen.get("driver_score"),
+                        "reason": pen["reason"],
+                        "buyer_concern": pen.get("buyer_concern"),
+                        "due_diligence_flag": pen.get("due_diligence_flag"),
+                        "remediation_action": pen["remediation_action"],
+                        "remediation_timeline": pen.get("remediation_timeline"),
+                        "remediation_effort": pen.get("remediation_effort"),
+                        "multiple_recovery": float(pen.get("multiple_recovery") or 0)
+                    }
+                    for pen in (penalties_result.data or [])
+                ],
+
+                "value_unlocks": [
+                    {
+                        "id": unlock["id"],
+                        "priority_rank": unlock["priority_rank"],
+                        "title": unlock["title"],
+                        "description": unlock.get("description"),
+                        "action_type": unlock["action_type"],
+                        "ebitda_impact": float(unlock.get("ebitda_impact") or 0),
+                        "multiple_impact": float(unlock.get("multiple_impact") or 0),
+                        "ev_impact": float(unlock["ev_impact"]),
+                        "effort_level": unlock.get("effort_level"),
+                        "timeline": unlock.get("timeline"),
+                        "is_locked": unlock.get("is_locked", True),
+                        "is_preview": unlock.get("is_preview", False)
+                    }
+                    for unlock in (unlocks_result.data or [])
+                ]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to retrieve shock report: {str(e)}"
+                }
+            }
+        )
+
+
+@app.post("/api/valuation/shock-report/{report_id}/analytics")
+async def track_shock_report_analytics(
+    report_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+    request_body: dict = Body(...)
+):
+    """
+    Track analytics events for shock report engagement.
+
+    Request body:
+        event_type: One of:
+            - 'section_expanded' (section_name required)
+            - 'pdf_downloaded'
+            - 'share_clicked'
+            - 'trial_cta_clicked'
+            - 'trial_started'
+            - 'paid_converted'
+        section_name: Optional section identifier
+        time_on_page: Optional seconds spent on page
+        scroll_depth: Optional percentage scrolled
+    """
+    try:
+        event_type = request_body.get("event_type")
+        valid_events = [
+            "report_viewed", "section_expanded", "pdf_downloaded",
+            "share_clicked", "trial_cta_clicked", "trial_started", "paid_converted"
+        ]
+
+        if event_type not in valid_events:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": f"Invalid event_type. Must be one of: {', '.join(valid_events)}"
+                    }
+                }
+            )
+
+        # Verify report belongs to tenant
+        report_check = supabase.table("valuation_shock_reports")\
+            .select("id")\
+            .eq("id", report_id)\
+            .eq("tenant_id", tenant_id)\
+            .limit(1)\
+            .execute()
+
+        if not report_check.data:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": "Shock report not found"
+                    }
+                }
+            )
+
+        # Insert analytics event
+        supabase.table("shock_report_analytics").insert({
+            "tenant_id": tenant_id,
+            "shock_report_id": report_id,
+            "event_type": event_type,
+            "section_name": request_body.get("section_name"),
+            "time_on_page": request_body.get("time_on_page"),
+            "scroll_depth": request_body.get("scroll_depth")
+        }).execute()
+
+        # Update report flags based on event
+        if event_type == "pdf_downloaded":
+            supabase.table("valuation_shock_reports")\
+                .update({"pdf_downloaded": True})\
+                .eq("id", report_id)\
+                .execute()
+        elif event_type == "trial_started":
+            supabase.table("valuation_shock_reports")\
+                .update({"trial_started": True})\
+                .eq("id", report_id)\
+                .execute()
+
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to track analytics: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/valuation/shock-reports")
+async def list_shock_reports(
+    tenant_id: str = Depends(get_current_tenant_id),
+    limit: int = 10,
+    page: int = 1
+):
+    """
+    List all shock reports for this tenant with pagination.
+    """
+    try:
+        limit = min(limit, 50)
+        offset = (page - 1) * limit
+
+        result = supabase.table("valuation_shock_reports")\
+            .select("id, generated_at, tier, value_gap, value_gap_percentage, confidence_score, total_recoverable_value")\
+            .eq("tenant_id", tenant_id)\
+            .order("generated_at", desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+
+        # Get total count
+        count_result = supabase.table("valuation_shock_reports")\
+            .select("id", count="exact")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
+        total = count_result.count if hasattr(count_result, 'count') else len(result.data)
+        total_pages = (total + limit - 1) // limit if total > 0 else 1
+
+        reports = []
+        for r in (result.data or []):
+            reports.append({
+                "id": r["id"],
+                "generated_at": r["generated_at"],
+                "tier": r.get("tier"),
+                "value_gap": float(r.get("value_gap") or 0),
+                "value_gap_percentage": float(r.get("value_gap_percentage") or 0),
+                "confidence_score": r.get("confidence_score"),
+                "total_recoverable_value": float(r.get("total_recoverable_value") or 0)
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "reports": reports,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "pages": total_pages
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to list shock reports: {str(e)}"
+                }
+            }
+        )
+
+
 # ============================================================
 # RUN SERVER
 # ============================================================

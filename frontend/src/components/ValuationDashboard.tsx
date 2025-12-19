@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { ScenarioSimulator } from './ScenarioSimulator'
 import { ExitReadiness } from './ExitReadiness'
 import { ValuationRoadmap } from './ValuationRoadmap'
+import { ShockReport } from './ShockReport'
 import { Tabs } from './ui/Tabs'
 import { GaugeMeter } from './ui/GaugeMeter'
 import { AnimatedCurrency, AnimatedPercentage } from './ui/AnimatedNumber'
@@ -78,7 +79,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [historicalSnapshots, setHistoricalSnapshots] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'scenario' | 'exit' | 'roadmap'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('overview')
 
   useEffect(() => {
     void fetchValuationData()
@@ -172,6 +173,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const tabOptions = useMemo(
     () => [
       { key: 'overview' as const, label: 'Overview' },
+      { key: 'shock' as const, label: 'Shock Report' },
       { key: 'scenario' as const, label: 'Scenario Simulator' },
       { key: 'exit' as const, label: 'Exit Readiness' },
       { key: 'roadmap' as const, label: 'Roadmap' },
@@ -453,6 +455,23 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                     </div>
                   )}
                 </GlassCard>
+              </motion.div>
+            )}
+
+            {activeTab === 'shock' && (
+              <motion.div
+                key="shock"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <ShockReport
+                  accessToken={accessToken}
+                  onStartTrial={() => {
+                    // TODO: Implement trial flow
+                    console.log('Trial started')
+                  }}
+                />
               </motion.div>
             )}
 
