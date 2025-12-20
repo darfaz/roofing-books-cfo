@@ -25,3 +25,14 @@ typer==0.15.1
 
 # Environment
 python-dotenv==1.0.1
+
+# Web scraping (optional)
+beautifulsoup4==4.12.3
+html2text==2024.2.26
+requests==2.32.3
+
+# MCP Server (optional)
+mcp>=0.9.0
+
+# Data processing
+numpy>=1.24.0
