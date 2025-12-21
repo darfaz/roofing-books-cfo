@@ -62,9 +62,9 @@ export function Login() {
             <div className="text-center mb-8">
               <div className="text-5xl mb-4">📊</div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                Valuation Dashboard
+                CrewCFO Dashboard
               </h1>
-              <p className="text-slate-400 mt-2">Sign in to view your business valuation</p>
+              <p className="text-slate-400 mt-2">Sign in to view your business metrics & valuation</p>
             </div>
 
             {error && (
