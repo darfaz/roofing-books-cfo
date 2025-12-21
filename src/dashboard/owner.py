@@ -34,46 +34,130 @@ def get_auth_client():
 
 def login_form():
     """Show login form and handle authentication"""
+    # Navigation bar for login page
     st.markdown("""
     <style>
+        .login-navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: rgba(10, 15, 26, 0.9);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid #1e293b;
+            z-index: 1000;
+        }
+        .login-navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: white;
+        }
+        .login-navbar-brand:hover {
+            opacity: 0.8;
+        }
+        .login-navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+        .login-navbar-link {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .login-navbar-link:hover {
+            color: white;
+        }
+        .login-navbar-link.active {
+            color: #10b981;
+        }
         .login-container {
-            max-width: 400px;
-            margin: 100px auto;
+            max-width: 420px;
+            margin: 120px auto 40px;
             padding: 40px;
-            background: #0f172a;
-            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(8px);
+            border-radius: 20px;
             border: 1px solid #1e293b;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
         .login-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
+        }
+        .login-header .icon {
+            font-size: 56px;
+            margin-bottom: 16px;
         }
         .login-header h1 {
             color: white;
             font-size: 28px;
+            font-weight: 700;
             margin-bottom: 8px;
+            background: linear-gradient(to right, white, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         .login-header p {
-            color: #64748b;
+            color: #94a3b8;
+            font-size: 15px;
+        }
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #1e293b;
+        }
+        .login-footer a {
+            color: #10b981;
+            text-decoration: none;
             font-size: 14px;
         }
+        .login-footer a:hover {
+            color: #34d399;
+        }
+        .demo-hint {
+            text-align: center;
+            margin-top: 20px;
+            color: #475569;
+            font-size: 12px;
+        }
     </style>
+    <div class="login-navbar">
+        <a href="https://crewcfo.com" class="login-navbar-brand">
+            <span style="font-size: 1.5rem;">🏠</span>
+            <span style="font-size: 1.25rem; font-weight: 700;">CrewCFO</span>
+        </a>
+        <div class="login-navbar-links">
+            <a href="https://crewcfo.com" class="login-navbar-link">Home</a>
+            <a href="https://valuation.crewcfo.com" class="login-navbar-link">Valuation</a>
+            <span class="login-navbar-link active">Dashboard</span>
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("""
         <div class="login-header">
-            <div style="font-size: 48px; margin-bottom: 16px;">🏠</div>
-            <h1>CrewCFO</h1>
-            <p>Sign in to your dashboard</p>
+            <div class="icon">📈</div>
+            <h1>Owner Dashboard</h1>
+            <p>Sign in to view your business metrics</p>
         </div>
         """, unsafe_allow_html=True)
 
         with st.form("login_form"):
             email = st.text_input("Email", placeholder="you@company.com")
             password = st.text_input("Password", type="password", placeholder="••••••••")
-            submit = st.form_submit_button("Sign In", use_container_width=True)
+            submit = st.form_submit_button("Sign In", use_container_width=True, type="primary")
 
             if submit:
                 if not email or not password:
@@ -100,8 +184,14 @@ def login_form():
                     st.error(f"An error occurred: {str(e)}")
 
         st.markdown("""
-        <div style="text-align: center; margin-top: 20px; color: #64748b; font-size: 12px;">
-            <a href="https://crewcfo.com" style="color: #10b981; text-decoration: none;">← Back to CrewCFO.com</a>
+        <div class="login-footer">
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 12px;">
+                Don't have an account? <a href="https://crewcfo.com">Get started</a>
+            </p>
+            <a href="https://crewcfo.com">← Back to CrewCFO.com</a>
+        </div>
+        <div class="demo-hint">
+            Demo: demo@crewcfo.com / demo1234
         </div>
         """, unsafe_allow_html=True)
 
@@ -691,27 +781,79 @@ def main():
         forecast = data["forecast"]
         jobs = data["jobs"]
     
-    # Header with CrewCFO branding and logout
-    header_cols = st.columns([6, 1, 1, 1])
-    with header_cols[0]:
-        st.markdown("""
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-            <span style="font-size: 2rem;">🏠</span>
-            <h1 style="margin: 0; font-size: 2rem; font-weight: 700; color: white;">CrewCFO</h1>
+    # Navigation bar with CrewCFO branding
+    st.markdown("""
+    <style>
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #1e293b;
+        }
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: white;
+        }
+        .navbar-brand:hover {
+            opacity: 0.8;
+        }
+        .navbar-brand span.logo {
+            font-size: 2rem;
+        }
+        .navbar-brand span.title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+        .navbar-link {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .navbar-link:hover {
+            color: white;
+        }
+        .navbar-link.active {
+            color: #10b981;
+        }
+    </style>
+    <div class="navbar">
+        <a href="https://crewcfo.com" class="navbar-brand" target="_self">
+            <span class="logo">🏠</span>
+            <span class="title">CrewCFO</span>
+        </a>
+        <div class="navbar-links">
+            <a href="https://app.crewcfo.com" class="navbar-link active">Dashboard</a>
+            <a href="https://valuation.crewcfo.com" class="navbar-link">Valuation</a>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Header row with refresh and logout
+    header_cols = st.columns([6, 1, 1])
+    with header_cols[0]:
         st.caption(f"Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
-    with header_cols[1]:
         user = st.session_state.get("user")
         if user:
-            st.caption(f"📧 {user.email[:20]}...")
-    with header_cols[2]:
+            st.caption(f"Logged in as: {user.email}")
+    with header_cols[1]:
         if st.button("🔄 Refresh", type="secondary", help="Clear cache and refresh data"):
             # Clear all cached data
             st.cache_data.clear()
             st.cache_resource.clear()
             st.rerun()
-    with header_cols[3]:
+    with header_cols[2]:
         if st.button("Logout", type="secondary"):
             logout()
     
