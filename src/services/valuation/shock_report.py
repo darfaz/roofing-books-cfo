@@ -159,13 +159,14 @@ class ShockReportEngine:
     }
 
     # Multiple penalty matrix based on driver scores
+    # Adjusted for roofing industry (3.5× baseline, max floor of 2.0×)
     MULTIPLE_PENALTIES = {
         'management_independence': {
             'weight': 0.25,
             'thresholds': [
                 {
                     'score_range': (0, 30),
-                    'penalty': -2.5,
+                    'penalty': -1.0,  # Adjusted: severe but keeps multiple above 2×
                     'reason': 'Owner IS the business',
                     'concern': 'Business value collapses if owner leaves',
                     'flag': 'Key-man risk assessment required',
@@ -175,7 +176,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (30, 50),
-                    'penalty': -1.5,
+                    'penalty': -0.6,
                     'reason': 'High owner dependency',
                     'concern': 'Owner handles critical functions daily',
                     'flag': 'Management transition plan needed',
@@ -185,7 +186,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (50, 70),
-                    'penalty': -0.75,
+                    'penalty': -0.3,
                     'reason': 'Moderate owner involvement',
                     'concern': 'Owner still required for major decisions',
                     'flag': 'Review decision-making authority',
@@ -200,7 +201,7 @@ class ShockReportEngine:
             'thresholds': [
                 {
                     'score_range': (0, 20),
-                    'penalty': -2.0,
+                    'penalty': -0.8,  # Roofing typically has low recurring, less penalty
                     'reason': 'No recurring revenue',
                     'concern': 'Revenue restarts from zero each year',
                     'flag': 'Revenue quality assessment needed',
@@ -210,7 +211,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (20, 40),
-                    'penalty': -1.2,
+                    'penalty': -0.5,
                     'reason': 'Minimal recurring revenue (<20%)',
                     'concern': 'Heavy reliance on new project wins',
                     'flag': 'Pipeline sustainability review',
@@ -220,7 +221,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (40, 60),
-                    'penalty': -0.5,
+                    'penalty': -0.2,
                     'reason': 'Low recurring revenue (20-40%)',
                     'concern': 'Revenue predictability below industry average',
                     'flag': 'Revenue mix analysis',
@@ -235,7 +236,7 @@ class ShockReportEngine:
             'thresholds': [
                 {
                     'score_range': (0, 40),
-                    'penalty': -1.5,
+                    'penalty': -0.6,
                     'reason': 'Unreliable financial records',
                     'concern': 'Cannot verify reported earnings',
                     'flag': 'Quality of earnings study required',
@@ -245,7 +246,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (40, 60),
-                    'penalty': -0.75,
+                    'penalty': -0.3,
                     'reason': 'Inconsistent record-keeping',
                     'concern': 'Historical reconciliation issues',
                     'flag': 'Accounting review needed',
@@ -260,7 +261,7 @@ class ShockReportEngine:
             'thresholds': [
                 {
                     'score_range': (0, 30),
-                    'penalty': -1.0,
+                    'penalty': -0.4,
                     'reason': 'High customer concentration',
                     'concern': 'Top 3 customers exceed 50% of revenue',
                     'flag': 'Customer concentration risk assessment',
@@ -270,7 +271,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (30, 50),
-                    'penalty': -0.5,
+                    'penalty': -0.2,
                     'reason': 'Moderate customer concentration',
                     'concern': 'Losing top customer would significantly impact revenue',
                     'flag': 'Customer relationship review',
@@ -285,7 +286,7 @@ class ShockReportEngine:
             'thresholds': [
                 {
                     'score_range': (0, 40),
-                    'penalty': -0.75,
+                    'penalty': -0.3,
                     'reason': 'No documented systems',
                     'concern': 'Tribal knowledge, difficult to scale or transfer',
                     'flag': 'Operational due diligence required',
@@ -295,7 +296,7 @@ class ShockReportEngine:
                 },
                 {
                     'score_range': (40, 60),
-                    'penalty': -0.35,
+                    'penalty': -0.15,
                     'reason': 'Partial system documentation',
                     'concern': 'Inconsistent process execution',
                     'flag': 'Process standardization review',
@@ -310,7 +311,7 @@ class ShockReportEngine:
             'thresholds': [
                 {
                     'score_range': (0, 40),
-                    'penalty': -0.5,
+                    'penalty': -0.2,
                     'reason': 'Limited market position',
                     'concern': 'No competitive moat or differentiation',
                     'flag': 'Market position analysis',
@@ -322,12 +323,22 @@ class ShockReportEngine:
         }
     }
 
-    # Base multiples by tier (Matador methodology)
+    # Roofing Industry Valuation Multiples (from knowledge base)
+    # Source: Matador methodology, industry research
+    # - Small Roofing SDE: 1.9× – 2.7× (average ~2.5×)
+    # - EBITDA Multiples: 2.5× – 3.6× (typical)
+    # - Revenue Multiple: 0.3× – 0.5×
     TIER_MULTIPLES = {
-        'below_avg': {'low': 2.5, 'high': 3.5, 'typical_sde': 3.0},
-        'avg': {'low': 4.0, 'high': 5.5, 'typical_sde': 4.5},
-        'above_avg': {'low': 6.0, 'high': 8.0, 'typical_sde': 7.0}
+        'below_avg': {'low': 2.0, 'high': 3.0, 'typical_sde': 2.5},   # ~3× EBITDA
+        'avg': {'low': 3.0, 'high': 4.5, 'typical_sde': 3.5},          # ~4.5× EBITDA
+        'above_avg': {'low': 4.5, 'high': 7.0, 'typical_sde': 5.5}     # ~7×+ for exceptional
     }
+
+    # Industry baseline multiple for roofing (used in penalty calculations)
+    ROOFING_BASELINE_MULTIPLE = 3.5  # Typical roofing company EBITDA multiple
+
+    # Owner expectation multiple (what owners typically hope for, used to show "shock")
+    OWNER_EXPECTATION_MULTIPLE = 5.0  # Owners often overestimate by 1.5-2× actual value
 
     def __init__(self):
         self.supabase: Client = create_client(
@@ -364,8 +375,9 @@ class ShockReportEngine:
         # 6. Determine tier
         tier = self._determine_tier(driver_scores)
 
-        # 7. Calculate valuations
-        owner_expected_multiple = 10.0  # Owners typically expect 10x
+        # 7. Calculate valuations using industry-appropriate multiples
+        # Roofing industry: owners often expect 5× but reality is 2.5-3.6× EBITDA
+        owner_expected_multiple = self.OWNER_EXPECTATION_MULTIPLE
         owner_expected_valuation = reported['ebitda'] * owner_expected_multiple
 
         buyer_valuation_low = defensible_ebitda * buyer_multiple['low']
@@ -465,16 +477,19 @@ class ShockReportEngine:
             .lte("transaction_date", end_date.isoformat())\
             .execute()
 
-        total_expenses = sum(float(t.get('total_amount', 0)) for t in expense_result.data) if expense_result.data else 0
+        # Expenses are stored as NEGATIVE numbers in the database
+        # Convert to positive for calculations
+        total_expenses_raw = sum(float(t.get('total_amount', 0)) for t in expense_result.data) if expense_result.data else 0
+        total_expenses = abs(total_expenses_raw)  # Make positive for clarity
 
-        # Identify owner compensation
+        # Identify owner compensation (also stored as negative, convert to positive)
         owner_comp = 0
         for txn in (expense_result.data or []):
             desc = (txn.get('description') or '').lower()
             if any(kw in desc for kw in self.OWNER_COMP_RULES['keywords']):
-                owner_comp += float(txn.get('total_amount', 0))
+                owner_comp += abs(float(txn.get('total_amount', 0)))
 
-        # Calculate basic EBITDA (before owner adds back everything)
+        # Calculate basic EBITDA = Revenue - Expenses
         gross_ebitda = revenue - total_expenses
 
         # Owner's reported EBITDA (adds back owner comp + typical adjustments)
@@ -723,8 +738,9 @@ class ShockReportEngine:
         penalties = []
         total_penalty = 0
 
-        # Start with a baseline multiple (assuming average tier initially)
-        baseline_multiple = 6.0
+        # Start with roofing industry baseline multiple
+        # Typical roofing company: 3.5× EBITDA (from knowledge base: 2.5-3.6×)
+        baseline_multiple = self.ROOFING_BASELINE_MULTIPLE
 
         for driver_key, config in self.MULTIPLE_PENALTIES.items():
             score = driver_scores.get(driver_key, 50)

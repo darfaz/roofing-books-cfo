@@ -1466,8 +1466,8 @@ async def generate_shock_report(
             overrides["claimed_addbacks"] = request_body["claimed_addbacks"]
 
         # Generate the shock report
-        engine = ShockReportEngine(tenant_id)
-        report = engine.generate_shock_report(**overrides)
+        engine = ShockReportEngine()
+        report = engine.generate_shock_report(tenant_id, **overrides)
 
         processing_time_ms = int((time.time() - start_time) * 1000)
 
@@ -1686,6 +1686,69 @@ async def get_latest_shock_report(tenant_id: str = Depends(get_current_tenant_id
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": f"Failed to retrieve shock report: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/valuation/shock-report/pdf")
+async def generate_shock_report_pdf(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """
+    Generate a PDF version of the latest shock report.
+
+    Returns the PDF file as a downloadable response.
+    """
+    from fastapi.responses import Response
+    from src.services.valuation.pdf_generator import generate_shock_report_pdf as gen_pdf
+    from src.services.valuation.shock_report import ShockReportEngine
+
+    try:
+        # Get tenant info for company name
+        tenant_result = supabase.table("tenants")\
+            .select("name")\
+            .eq("id", tenant_id)\
+            .limit(1)\
+            .execute()
+
+        company_name = tenant_result.data[0]["name"] if tenant_result.data else "Your Company"
+
+        # Generate fresh shock report
+        engine = ShockReportEngine()
+        report = engine.generate_shock_report(tenant_id)
+
+        # Generate PDF
+        pdf_bytes = gen_pdf(report, company_name)
+
+        # Return PDF as downloadable file
+        filename = f"shock_report_{datetime.now().strftime('%Y%m%d')}.pdf"
+
+        # Track PDF download analytics
+        try:
+            supabase.table("shock_report_analytics").insert({
+                "tenant_id": tenant_id,
+                "event_type": "pdf_downloaded"
+            }).execute()
+        except Exception:
+            pass
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "PDF_GENERATION_ERROR",
+                    "message": f"Failed to generate PDF: {str(e)}"
                 }
             }
         )
