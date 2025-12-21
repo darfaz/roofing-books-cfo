@@ -76,10 +76,10 @@ const MOCK_DATA = {
 
 export function OwnerDashboard() {
   const [cash, setCash] = useState<CashPosition>(MOCK_DATA.cash)
-  const [revenue, setRevenue] = useState<Revenue>(MOCK_DATA.revenue)
-  const [arAging, setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
+  const [revenue] = useState<Revenue>(MOCK_DATA.revenue)
+  const [arAging] = useState<ARBucket>(MOCK_DATA.arAging)
   const [forecast, setForecast] = useState<ForecastWeek[]>(MOCK_DATA.forecast)
-  const [jobs, setJobs] = useState<Job[]>(MOCK_DATA.jobs)
+  const [jobs] = useState<Job[]>(MOCK_DATA.jobs)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -222,29 +222,29 @@ export function OwnerDashboard() {
         <MetricCard
           label="Cash Balance"
           value={formatCurrency(cash.total_cash)}
-          change={`${cash.change_wow >= 0 ? '+' : ''}${(cash.change_wow * 100).toFixed(0)}% WoW`}
-          changeType={cash.change_wow >= 0 ? 'positive' : 'negative'}
+          trendValue={`${cash.change_wow >= 0 ? '+' : ''}${(cash.change_wow * 100).toFixed(0)}% WoW`}
+          trend={cash.change_wow >= 0 ? 'up' : 'down'}
           icon="💵"
         />
         <MetricCard
           label="Revenue MTD"
           value={formatCurrency(revenue.mtd)}
-          change={`${(revenue.progress * 100).toFixed(0)}% of ${formatCurrency(revenue.target)} target`}
-          changeType={revenue.progress >= 0.8 ? 'positive' : 'neutral'}
+          subValue={`${(revenue.progress * 100).toFixed(0)}% of ${formatCurrency(revenue.target)} target`}
+          trend={revenue.progress >= 0.8 ? 'up' : 'neutral'}
           icon="📈"
         />
         <MetricCard
           label="AR Outstanding"
           value={formatCurrency(totalAR)}
-          change={`${formatCurrency(overdueAR)} overdue`}
-          changeType={overdueAR > 0 ? 'negative' : 'positive'}
+          subValue={`${formatCurrency(overdueAR)} overdue`}
+          trend={overdueAR > 0 ? 'down' : 'up'}
           icon="📋"
         />
         <MetricCard
           label="Backlog"
           value={formatCurrency(MOCK_DATA.backlog.amount)}
-          change={`${MOCK_DATA.backlog.jobs} jobs scheduled`}
-          changeType="neutral"
+          subValue={`${MOCK_DATA.backlog.jobs} jobs scheduled`}
+          trend="neutral"
           icon="🔧"
         />
       </div>
