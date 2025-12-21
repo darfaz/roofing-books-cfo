@@ -7,6 +7,7 @@ import { Header } from './components/Header'
 
 function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [checkingOnboarding, setCheckingOnboarding] = useState(true)
 
@@ -15,6 +16,9 @@ function App() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       const tenantId = user?.user_metadata?.tenant_id
+
+      // Store user email
+      setUserEmail(user?.email)
 
       if (!tenantId) {
         setShowOnboarding(true)
@@ -82,7 +86,7 @@ function App() {
   if (showOnboarding) {
     return (
       <>
-        <Header currentPage="valuation" />
+        <Header userEmail={userEmail} />
         <div className="pt-16">
           <OnboardingFlow
             accessToken={accessToken}
@@ -95,7 +99,7 @@ function App() {
 
   return (
     <>
-      <Header currentPage="valuation" />
+      <Header userEmail={userEmail} />
       <div className="pt-16">
         <ValuationDashboard accessToken={accessToken} />
       </div>

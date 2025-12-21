@@ -5,6 +5,7 @@ import { ScenarioSimulator } from './ScenarioSimulator'
 import { ExitReadiness } from './ExitReadiness'
 import { ValuationRoadmap } from './ValuationRoadmap'
 import { ShockReport } from './ShockReport'
+import { OwnerDashboard } from './OwnerDashboard'
 import { Tabs } from './ui/Tabs'
 import { GaugeMeter } from './ui/GaugeMeter'
 import { AnimatedCurrency, AnimatedPercentage } from './ui/AnimatedNumber'
@@ -79,7 +80,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [historicalSnapshots, setHistoricalSnapshots] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('overview')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
 
   useEffect(() => {
     void fetchValuationData()
@@ -172,11 +173,12 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
 
   const tabOptions = useMemo(
     () => [
-      { key: 'overview' as const, label: 'Overview' },
-      { key: 'shock' as const, label: 'Shock Report' },
-      { key: 'scenario' as const, label: 'Scenario Simulator' },
-      { key: 'exit' as const, label: 'Exit Readiness' },
-      { key: 'roadmap' as const, label: 'Roadmap' },
+      { key: 'dashboard' as const, label: 'Dashboard', icon: '📊' },
+      { key: 'overview' as const, label: 'Valuation', icon: '💰' },
+      { key: 'shock' as const, label: 'Shock Report', icon: '⚡' },
+      { key: 'scenario' as const, label: 'Simulator', icon: '🎮' },
+      { key: 'exit' as const, label: 'Exit Readiness', icon: '🚀' },
+      { key: 'roadmap' as const, label: 'Roadmap', icon: '🗺️' },
     ],
     [],
   )
@@ -312,6 +314,16 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
           <Tabs value={activeTab} onChange={setActiveTab} tabs={tabOptions} />
 
           <AnimatePresence mode="wait">
+            {activeTab === 'dashboard' && (
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <OwnerDashboard />
+              </motion.div>
+            )}
             {activeTab === 'overview' && (
               <motion.div
                 key="overview"

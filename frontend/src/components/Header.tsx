@@ -2,17 +2,15 @@ import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 
 interface HeaderProps {
-  currentPage?: 'dashboard' | 'valuation'
+  userEmail?: string
 }
 
-export function Header({ currentPage }: HeaderProps) {
+export function Header({ userEmail }: HeaderProps) {
   const handleLogout = async () => {
     await supabase.auth.signOut()
   }
 
   const homeUrl = import.meta.env.PROD ? 'https://crewcfo.com' : '/'
-  const dashboardUrl = import.meta.env.PROD ? 'https://app.crewcfo.com' : '/'
-  const valuationUrl = import.meta.env.PROD ? 'https://valuation.crewcfo.com' : '/'
 
   return (
     <motion.header
@@ -30,27 +28,18 @@ export function Header({ currentPage }: HeaderProps) {
           <span className="text-xl font-bold text-white">CrewCFO</span>
         </a>
 
-        {/* Navigation Links */}
-        <nav className="flex items-center gap-6">
+        {/* Right side - user info and logout */}
+        <div className="flex items-center gap-4">
+          {userEmail && (
+            <span className="text-sm text-slate-400 hidden sm:block">
+              {userEmail}
+            </span>
+          )}
           <a
-            href={dashboardUrl}
-            className={`text-sm transition ${
-              currentPage === 'dashboard'
-                ? 'text-emerald-400 font-medium'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            href={homeUrl}
+            className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
           >
-            Dashboard
-          </a>
-          <a
-            href={valuationUrl}
-            className={`text-sm transition ${
-              currentPage === 'valuation'
-                ? 'text-emerald-400 font-medium'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Valuation
+            Home
           </a>
           <button
             onClick={() => void handleLogout()}
@@ -58,7 +47,7 @@ export function Header({ currentPage }: HeaderProps) {
           >
             Logout
           </button>
-        </nav>
+        </div>
       </div>
     </motion.header>
   )
