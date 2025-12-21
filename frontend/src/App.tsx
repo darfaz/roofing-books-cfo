@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase'
 import { Login } from './components/Login'
 import { ValuationDashboard } from './components/ValuationDashboard'
 import { OnboardingFlow } from './components/OnboardingFlow'
+import { Header } from './components/Header'
 
 function App() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -80,14 +81,26 @@ function App() {
   // Show onboarding flow for new users
   if (showOnboarding) {
     return (
-      <OnboardingFlow
-        accessToken={accessToken}
-        onComplete={() => setShowOnboarding(false)}
-      />
+      <>
+        <Header currentPage="valuation" />
+        <div className="pt-16">
+          <OnboardingFlow
+            accessToken={accessToken}
+            onComplete={() => setShowOnboarding(false)}
+          />
+        </div>
+      </>
     )
   }
 
-  return <ValuationDashboard accessToken={accessToken} />
+  return (
+    <>
+      <Header currentPage="valuation" />
+      <div className="pt-16">
+        <ValuationDashboard accessToken={accessToken} />
+      </div>
+    </>
+  )
 }
 
 export default App
