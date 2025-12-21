@@ -73,113 +73,36 @@ class ValuationEngine:
         }
     
     def _query_ttm_revenue_direct(self, start_date: date, end_date: date) -> Dict[str, Any]:
-        """Query TTM revenue directly from transaction_lines and accounts"""
-        # First get all revenue account IDs
-        revenue_accounts = self.supabase.table("accounts")\
-            .select("id")\
+        """Query TTM revenue directly from transactions table (invoices)"""
+        # Get revenue from invoices in date range
+        invoices = self.supabase.table("transactions")\
+            .select("total_amount")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("account_type", "revenue")\
-            .eq("is_active", True)\
-            .execute()
-        
-        account_ids = [acc["id"] for acc in revenue_accounts.data]
-        
-        if not account_ids:
-            return {
-                "total_revenue": 0,
-                "breakdown": {}
-            }
-        
-        # Get transactions in date range
-        transactions = self.supabase.table("transactions")\
-            .select("id, transaction_date")\
-            .eq("tenant_id", self.tenant_id)\
+            .eq("transaction_type", "invoice")\
             .gte("transaction_date", start_date.isoformat())\
             .lte("transaction_date", end_date.isoformat())\
             .neq("status", "voided")\
             .execute()
-        
-        transaction_ids = [tx["id"] for tx in transactions.data]
-        
-        if not transaction_ids:
-            return {
-                "total_revenue": 0,
-                "breakdown": {}
-            }
-        
-        # Get transaction_lines for revenue accounts
-        result = self.supabase.table("transaction_lines")\
-            .select("credit_amount")\
-            .in_("account_id", account_ids)\
-            .in_("transaction_id", transaction_ids)\
-            .execute()
-        
-        total_revenue = sum(float(line.get("credit_amount", 0)) for line in result.data if line.get("credit_amount"))
-        
+
+        total_revenue = sum(float(t.get("total_amount", 0)) for t in invoices.data) if invoices.data else 0
+
         return {
             "total_revenue": total_revenue,
             "breakdown": {}
         }
     
     def _query_ttm_expenses_direct(self, start_date: date, end_date: date) -> Dict[str, Any]:
-        """Query TTM expenses directly from transaction_lines and accounts"""
-        # Get all expense account IDs with their subtypes
-        expense_accounts = self.supabase.table("accounts")\
-            .select("id, account_subtype, name")\
+        """Query TTM expenses directly from transactions table (bills/expenses)"""
+        # Get expenses from bills and expense transactions
+        expenses = self.supabase.table("transactions")\
+            .select("total_amount, description, category")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("account_type", "expense")\
-            .eq("is_active", True)\
-            .execute()
-        
-        account_map = {acc["id"]: acc for acc in expense_accounts.data}
-        account_ids = list(account_map.keys())
-        
-        if not account_ids:
-            return {
-                "total_expenses": 0,
-                "breakdown": {
-                    "total": 0,
-                    "cogs": 0,
-                    "operating": 0,
-                    "depreciation": 0,
-                    "interest": 0,
-                    "taxes": 0,
-                    "owner_comp": 0
-                }
-            }
-        
-        # Get transactions in date range
-        transactions = self.supabase.table("transactions")\
-            .select("id")\
-            .eq("tenant_id", self.tenant_id)\
+            .in_("transaction_type", ["bill", "expense"])\
             .gte("transaction_date", start_date.isoformat())\
             .lte("transaction_date", end_date.isoformat())\
             .neq("status", "voided")\
             .execute()
-        
-        transaction_ids = [tx["id"] for tx in transactions.data]
-        
-        if not transaction_ids:
-            return {
-                "total_expenses": 0,
-                "breakdown": {
-                    "total": 0,
-                    "cogs": 0,
-                    "operating": 0,
-                    "depreciation": 0,
-                    "interest": 0,
-                    "taxes": 0,
-                    "owner_comp": 0
-                }
-            }
-        
-        # Get transaction_lines for expense accounts
-        result = self.supabase.table("transaction_lines")\
-            .select("debit_amount, account_id")\
-            .in_("account_id", account_ids)\
-            .in_("transaction_id", transaction_ids)\
-            .execute()
-        
+
         total_expenses = 0
         breakdown = {
             "total": 0,
@@ -190,79 +113,57 @@ class ValuationEngine:
             "taxes": 0,
             "owner_comp": 0
         }
-        
-        for line in result.data:
-            amount = float(line.get("debit_amount", 0))
-            account_id = line.get("account_id")
-            account = account_map.get(account_id, {})
-            
+
+        for txn in (expenses.data or []):
+            # Expenses are stored as negative, convert to positive
+            amount = abs(float(txn.get("total_amount", 0)))
             total_expenses += amount
-            breakdown["total"] += amount
-            
-            subtype = (account.get("account_subtype") or "").lower()
-            name = (account.get("name") or "").lower()
-            
-            # Categorize for addbacks
-            if "depreciation" in subtype or "depreciation" in name or "amortization" in subtype or "amortization" in name:
+
+            desc = (txn.get("description") or "").lower()
+            category = (txn.get("category") or "").lower()
+
+            # Categorize based on description/category
+            if "depreciation" in desc or "amortization" in desc:
                 breakdown["depreciation"] += amount
-            elif "interest" in subtype or "interest" in name:
+            elif "interest" in desc or "loan interest" in category:
                 breakdown["interest"] += amount
-            elif "tax" in subtype or "tax" in name:
+            elif "tax" in desc or "taxes" in category:
                 breakdown["taxes"] += amount
-            elif subtype == "cogs":
+            elif "materials" in category or "cogs" in category or "cost of goods" in desc:
                 breakdown["cogs"] += amount
             else:
                 breakdown["operating"] += amount
-        
+
         breakdown["total"] = total_expenses
-        
+
         return {
             "total_expenses": total_expenses,
             "breakdown": breakdown
         }
     
     def _get_owner_compensation(self, start_date: date, end_date: date) -> float:
-        """Get owner compensation from expense accounts (salary, benefits, draws)"""
-        # Get all expense accounts and filter for owner-related ones
-        all_accounts = self.supabase.table("accounts")\
-            .select("id, name")\
+        """Get owner compensation from transactions (salary, benefits, draws)"""
+        # Get expense transactions in date range
+        expenses = self.supabase.table("transactions")\
+            .select("total_amount, description")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("account_type", "expense")\
-            .eq("is_active", True)\
-            .execute()
-        
-        # Filter for owner compensation accounts (case-insensitive)
-        owner_keywords = ["owner", "salary", "draw", "w-2", "w2", "officer compensation"]
-        owner_account_ids = [
-            acc["id"] for acc in all_accounts.data
-            if any(keyword in acc.get("name", "").lower() for keyword in owner_keywords)
-        ]
-        
-        if not owner_account_ids:
-            return 0.0
-        
-        # Get transactions in date range
-        transactions = self.supabase.table("transactions")\
-            .select("id")\
-            .eq("tenant_id", self.tenant_id)\
+            .in_("transaction_type", ["bill", "expense"])\
             .gte("transaction_date", start_date.isoformat())\
             .lte("transaction_date", end_date.isoformat())\
             .neq("status", "voided")\
             .execute()
-        
-        transaction_ids = [tx["id"] for tx in transactions.data]
-        
-        if not transaction_ids:
-            return 0.0
-        
-        # Get transaction_lines for owner compensation accounts
-        result = self.supabase.table("transaction_lines")\
-            .select("debit_amount")\
-            .in_("account_id", owner_account_ids)\
-            .in_("transaction_id", transaction_ids)\
-            .execute()
-        
-        return sum(float(line.get("debit_amount", 0)) for line in result.data if line.get("debit_amount"))
+
+        # Filter for owner compensation (case-insensitive)
+        owner_keywords = ["owner", "officer", "shareholder", "member", "partner",
+                          "draw", "distribution", "dividend", "bonus", "w-2", "w2"]
+
+        owner_comp = 0.0
+        for txn in (expenses.data or []):
+            desc = (txn.get("description") or "").lower()
+            if any(kw in desc for kw in owner_keywords):
+                owner_comp += abs(float(txn.get("total_amount", 0)))
+
+        return owner_comp
     
     def _get_addbacks(self, start_date: date, end_date: date) -> Dict[str, float]:
         """Get addbacks for SDE calculation (depreciation, interest, taxes, etc.)"""

@@ -455,7 +455,7 @@ class ShockReportEngine:
         start_date,
         end_date
     ) -> Dict[str, float]:
-        """Calculate financials as the owner reports them (with all add-backs)"""
+        """Calculate financials as the owner reports them (SDE with add-backs)"""
 
         # Get revenue from invoices
         revenue_result = self.supabase.table("transactions")\
@@ -489,21 +489,38 @@ class ShockReportEngine:
             if any(kw in desc for kw in self.OWNER_COMP_RULES['keywords']):
                 owner_comp += abs(float(txn.get('total_amount', 0)))
 
-        # Calculate basic EBITDA = Revenue - Expenses
-        gross_ebitda = revenue - total_expenses
+        # Calculate net income = Revenue - Expenses
+        net_income = revenue - total_expenses
 
-        # Owner's reported EBITDA (adds back owner comp + typical adjustments)
-        # Owners typically add back 15-25% of expenses as "adjustments"
-        estimated_addbacks = total_expenses * 0.18  # Conservative estimate
-        reported_ebitda = gross_ebitda + owner_comp + estimated_addbacks
+        # Identify add-backs from expense descriptions
+        depreciation = 0
+        interest = 0
+        taxes = 0
+        for txn in (expense_result.data or []):
+            desc = (txn.get('description') or '').lower()
+            amount = abs(float(txn.get('total_amount', 0)))
+            if 'depreciation' in desc or 'amortization' in desc:
+                depreciation += amount
+            elif 'interest' in desc:
+                interest += amount
+            elif 'tax' in desc:
+                taxes += amount
+
+        # Calculate SDE (Seller's Discretionary Earnings) - standard for small business valuation
+        # SDE = Net Income + Owner Comp + Depreciation + Interest + Taxes
+        actual_addbacks = depreciation + interest + taxes
+        sde = net_income + owner_comp + actual_addbacks
 
         return {
             'revenue': revenue,
             'expenses': total_expenses,
-            'gross_ebitda': gross_ebitda,
+            'gross_ebitda': net_income,  # Kept for compatibility
             'owner_comp': owner_comp,
-            'total_addbacks': owner_comp + estimated_addbacks,
-            'ebitda': reported_ebitda
+            'depreciation': depreciation,
+            'interest': interest,
+            'taxes': taxes,
+            'total_addbacks': owner_comp + actual_addbacks,
+            'ebitda': sde  # This is actually SDE, used as primary valuation metric
         }
 
     def _analyze_ebitda_adjustments(
