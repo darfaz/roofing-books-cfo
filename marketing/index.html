@@ -53,10 +53,10 @@
             </a>
             <div class="hidden md:flex gap-8 text-sm text-slate-400">
                 <a href="#features" class="hover:text-white transition">Features</a>
-                <a href="/pricing" class="hover:text-white transition">Pricing</a>
+                <a href="#pricing" class="hover:text-white transition">Pricing</a>
                 <a href="#testimonials" class="hover:text-white transition">Testimonials</a>
                 <a href="#faq" class="hover:text-white transition">FAQ</a>
-                <a href="/about" class="hover:text-white transition">About</a>
+                <a href="#about" class="hover:text-white transition">About</a>
             </div>
             <div class="flex items-center gap-4">
                 <a href="https://app.crewcfo.com" class="text-slate-400 hover:text-white transition">Dashboard</a>
@@ -332,37 +332,42 @@
     <section id="pricing" class="py-20 px-6 bg-slate-900/50">
         <div class="max-w-4xl mx-auto text-center">
             <h2 class="text-3xl md:text-4xl font-bold mb-4">
-                Simple Pricing. Unlimited Everything.
+                Simple Pricing. <span class="gradient-text">Unlimited Everything.</span>
             </h2>
             <p class="text-slate-400 mb-12">
-                One plan. One price. No surprises.
+                One plan. One price. No surprises. No per-transaction fees. No user limits.
             </p>
-            
-            <div class="bg-slate-900 rounded-2xl p-8 border border-slate-800 max-w-lg mx-auto">
+
+            <!-- Main Pricing Card -->
+            <div class="bg-slate-900 rounded-2xl p-8 border-2 border-emerald-500 max-w-lg mx-auto relative mb-16">
+                <div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-emerald-500 text-black text-sm font-semibold px-4 py-1 rounded-full">
+                    MOST POPULAR
+                </div>
+
                 <div class="text-emerald-400 font-semibold mb-2">COMPLETE</div>
                 <div class="flex items-baseline justify-center gap-2 mb-2">
-                    <span class="text-5xl font-bold">$299</span>
-                    <span class="text-slate-400">/month</span>
+                    <span class="text-6xl font-bold">$299</span>
+                    <span class="text-slate-400 text-xl">/month</span>
                 </div>
-                <div class="text-slate-400 text-sm mb-8">
-                    or $249/mo billed annually (save $600)
+                <div class="text-slate-400 mb-8">
+                    or <span class="text-white font-semibold">$249/mo</span> billed annually <span class="text-emerald-400">(save $600)</span>
                 </div>
-                
-                <div class="grid grid-cols-2 gap-3 text-left mb-8">
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Unlimited transactions</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Unlimited jobs</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Unlimited users</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">AI auto-classification</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Job costing & margins</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">13-week forecast</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Weekly CFO brief</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">AR reminders</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">QuickBooks sync</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Mobile dashboard</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Email & chat support</span></div>
-                    <div class="flex items-center gap-2 text-sm"><span class="text-emerald-400">✓</span><span class="text-slate-300">Onboarding included</span></div>
+
+                <div class="space-y-4 text-left mb-8">
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span><strong>Unlimited</strong> transactions</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span><strong>Unlimited</strong> jobs & projects</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span><strong>Unlimited</strong> users</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>AI auto-classification (70%+ accuracy)</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>Real-time job costing & margins</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>13-week cash flow forecast</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>Weekly CFO brief in your inbox</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>Automated AR reminders</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>QuickBooks Online sync (2-way)</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>Mobile-friendly dashboard</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>Email & chat support</span></div>
+                    <div class="flex items-center gap-3"><span class="text-emerald-400 text-xl">✓</span><span>1-on-1 onboarding call included</span></div>
                 </div>
-                
+
                 <button onclick="openCalendly()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-4 rounded-lg text-lg transition">
                     Start 14-Day Free Trial
                 </button>
@@ -370,23 +375,91 @@
                     No credit card required. Cancel anytime.
                 </p>
             </div>
-            
-            <!-- Comparison -->
-            <div class="mt-12 grid md:grid-cols-3 gap-4 text-sm">
-                <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
-                    <div class="text-slate-400 mb-1">vs. Bookkeeper</div>
-                    <div class="font-semibold">$500-1,500/mo</div>
-                    <div class="text-slate-500">+ no forecasting</div>
+
+            <!-- Full Comparison Grid -->
+            <h3 class="text-2xl font-bold mb-8">How We Compare</h3>
+            <div class="grid md:grid-cols-4 gap-4 mb-16">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-slate-400 text-sm mb-2">DIY Bookkeeping</div>
+                    <div class="text-2xl font-bold mb-1">$0</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm text-slate-400 space-y-2">
+                        <li class="text-red-400">✗ 10+ hours/week of your time</li>
+                        <li class="text-red-400">✗ No forecasting</li>
+                        <li class="text-red-400">✗ Error-prone</li>
+                        <li class="text-red-400">✗ No job costing</li>
+                    </ul>
                 </div>
-                <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
-                    <div class="text-slate-400 mb-1">vs. Fractional CFO</div>
-                    <div class="font-semibold">$2,000-5,000/mo</div>
-                    <div class="text-slate-500">+ limited availability</div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-slate-400 text-sm mb-2">Part-time Bookkeeper</div>
+                    <div class="text-2xl font-bold mb-1">$500-1,500</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm text-slate-400 space-y-2">
+                        <li class="text-amber-400">~ Basic data entry</li>
+                        <li class="text-red-400">✗ No forecasting</li>
+                        <li class="text-red-400">✗ Doesn't know roofing</li>
+                        <li class="text-red-400">✗ Week-old reports</li>
+                    </ul>
                 </div>
-                <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
-                    <div class="text-slate-400 mb-1">vs. Doing it yourself</div>
-                    <div class="font-semibold">Your sanity</div>
-                    <div class="text-slate-500">+ your weekends</div>
+                <div class="bg-emerald-500/10 rounded-xl p-6 border-2 border-emerald-500">
+                    <div class="text-emerald-400 text-sm mb-2 font-semibold">CrewCFO</div>
+                    <div class="text-2xl font-bold mb-1">$299</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm space-y-2">
+                        <li class="text-emerald-400">✓ AI automation</li>
+                        <li class="text-emerald-400">✓ 13-week forecast</li>
+                        <li class="text-emerald-400">✓ Built for roofing</li>
+                        <li class="text-emerald-400">✓ Real-time dashboard</li>
+                    </ul>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <div class="text-slate-400 text-sm mb-2">Fractional CFO</div>
+                    <div class="text-2xl font-bold mb-1">$2,000-5,000</div>
+                    <div class="text-slate-500 text-sm mb-4">/month</div>
+                    <ul class="text-sm text-slate-400 space-y-2">
+                        <li class="text-emerald-400">✓ Strategic advice</li>
+                        <li class="text-emerald-400">✓ Forecasting</li>
+                        <li class="text-amber-400">~ Limited availability</li>
+                        <li class="text-red-400">✗ 10x the cost</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Money Back Guarantee -->
+            <div class="max-w-2xl mx-auto text-center mb-16">
+                <div class="text-5xl mb-4">🛡️</div>
+                <h3 class="text-2xl font-bold mb-4">30-Day Money-Back Guarantee</h3>
+                <p class="text-slate-400">
+                    If you're not seeing clearer finances within your first 30 days, we'll refund every penny. No questions asked. We're that confident you'll love it.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing FAQ -->
+    <section class="py-16 px-6">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-2xl font-bold text-center mb-12">Pricing FAQ</h2>
+            <div class="space-y-4">
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Are there any setup fees?</h3>
+                    <p class="text-slate-400">No. Zero setup fees. Your subscription includes a 1-on-1 onboarding call where we help you connect QuickBooks and configure everything.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">What if I have multiple companies or entities?</h3>
+                    <p class="text-slate-400">Each QuickBooks company is a separate subscription. If you run 2 roofing companies, you'd need 2 CrewCFO subscriptions. Contact us for multi-company discounts.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Can I cancel anytime?</h3>
+                    <p class="text-slate-400">Yes. No contracts, no cancellation fees. If you're on annual billing, we'll refund the unused portion.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">What's included in the free trial?</h3>
+                    <p class="text-slate-400">Everything. Full access to all features for 14 days. Connect your QuickBooks, see your real data, try the forecasting. No credit card required to start.</p>
+                </div>
+                <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
+                    <h3 class="font-semibold text-lg mb-2">Do you offer discounts for annual billing?</h3>
+                    <p class="text-slate-400">Yes! Pay annually and get 2 months free ($249/mo instead of $299/mo). That's $600 saved per year.</p>
                 </div>
             </div>
         </div>
@@ -414,6 +487,118 @@
                 <div class="bg-slate-900 rounded-xl p-6 border border-slate-800">
                     <h3 class="font-semibold text-lg mb-2">Is my data secure?</h3>
                     <p class="text-slate-400">Bank-level security. We use 256-bit encryption, SOC 2 compliant infrastructure, and never store your banking credentials.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-20 px-6">
+        <div class="max-w-4xl mx-auto text-center mb-16">
+            <h2 class="text-3xl md:text-4xl font-bold mb-4">
+                Built for Roofers, <span class="gradient-text">By People Who Get It</span>
+            </h2>
+            <p class="text-xl text-slate-400 max-w-2xl mx-auto">
+                We started CrewCFO because roofing contractors deserve financial clarity—not spreadsheet nightmares.
+            </p>
+        </div>
+
+        <!-- Our Story -->
+        <div class="max-w-3xl mx-auto mb-20">
+            <h3 class="text-2xl font-bold mb-6">Our Story</h3>
+            <div class="text-slate-300 space-y-6">
+                <p>
+                    Every roofing contractor we've met has the same story: You're great at roofing. You built your business from nothing. You've got crews, trucks, and a reputation for quality work.
+                </p>
+                <p>
+                    But the financial side? It's chaos. Receipts stuffed in truck consoles. QuickBooks that nobody really understands. That sinking feeling when you finish a big job but somehow still can't make payroll.
+                </p>
+                <p>
+                    We saw roofing company owners spending their Sunday nights doing bookkeeping instead of being with their families. We saw profitable companies nearly go under because they couldn't see a cash crunch coming. We saw contractors charging too little because they didn't actually know their job costs.
+                </p>
+                <p class="text-white font-medium">
+                    So we built CrewCFO.
+                </p>
+                <p>
+                    We combined AI that actually understands roofing transactions with the kind of financial insights that used to require a $3,000/month CFO. All for less than what most contractors spend on coffee each month.
+                </p>
+                <p>
+                    Our mission is simple: <span class="text-emerald-400 font-semibold">Give every roofing contractor the financial clarity to grow with confidence.</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- What We Believe -->
+        <div class="max-w-4xl mx-auto mb-20 bg-slate-900/50 rounded-2xl p-8 md:p-12">
+            <h3 class="text-2xl font-bold text-center mb-12">What We Believe</h3>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <div class="text-4xl mb-4">🎯</div>
+                    <h4 class="text-xl font-semibold mb-2">Vertical Focus</h4>
+                    <p class="text-slate-400">Generic accounting software doesn't cut it for trades. We built everything specifically for roofing contractors—job costing, seasonality, insurance claims, all of it.</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl mb-4">⚡</div>
+                    <h4 class="text-xl font-semibold mb-2">Speed Over Perfection</h4>
+                    <p class="text-slate-400">You don't need penny-perfect books every day. You need to know if you're okay. Our AI gets you 90% of the way instantly—you handle the exceptions.</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl mb-4">🔮</div>
+                    <h4 class="text-xl font-semibold mb-2">Forward-Looking</h4>
+                    <p class="text-slate-400">Most bookkeeping tells you what happened last month. We show you what's coming next quarter. That's the difference between surviving and thriving.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Why Roofing -->
+        <div class="max-w-3xl mx-auto mb-20">
+            <h3 class="text-2xl font-bold mb-6">Why Roofing?</h3>
+            <div class="space-y-6 text-slate-300">
+                <p>
+                    Roofing is one of the most financially complex trades. You've got:
+                </p>
+                <ul class="space-y-3 ml-6">
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Massive seasonality</strong> — Storm season can 10x your revenue, then winter slows to a crawl</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Complex job costing</strong> — Materials, labor, subs, dump fees, permits... tracking it all per job is a nightmare</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Cash flow chaos</strong> — You front materials, wait 30-60 days for payment, and hope your line of credit holds</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="text-emerald-400 mt-1">→</span>
+                        <span><strong class="text-white">Insurance complexity</strong> — Supplement negotiations, depreciation recovery, payment delays</span>
+                    </li>
+                </ul>
+                <p>
+                    Generic bookkeeping software wasn't built for this. We were.
+                </p>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="max-w-4xl mx-auto">
+            <div class="grid md:grid-cols-4 gap-8 text-center">
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">70%+</div>
+                    <div class="text-slate-400">Transactions auto-classified</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">11 days</div>
+                    <div class="text-slate-400">Faster AR collection</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">5 hrs</div>
+                    <div class="text-slate-400">Saved per week on books</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold text-emerald-400 mb-2">13 weeks</div>
+                    <div class="text-slate-400">Cash flow visibility</div>
                 </div>
             </div>
         </div>
@@ -462,16 +647,16 @@
                     <h4 class="font-semibold mb-4">Product</h4>
                     <ul class="space-y-2 text-sm text-slate-400">
                         <li><a href="#features" class="hover:text-white">Features</a></li>
-                        <li><a href="/pricing" class="hover:text-white">Pricing</a></li>
+                        <li><a href="#pricing" class="hover:text-white">Pricing</a></li>
                         <li><a href="#" class="hover:text-white">Integrations</a></li>
                     </ul>
                 </div>
                 <div>
                     <h4 class="font-semibold mb-4">Company</h4>
                     <ul class="space-y-2 text-sm text-slate-400">
-                        <li><a href="/about" class="hover:text-white">About</a></li>
+                        <li><a href="#about" class="hover:text-white">About</a></li>
                         <li><a href="#" class="hover:text-white">Blog</a></li>
-                        <li><a href="#" class="hover:text-white">Contact</a></li>
+                        <li><a href="mailto:hello@crewcfo.com" class="hover:text-white">Contact</a></li>
                     </ul>
                 </div>
                 <div>
