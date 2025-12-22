@@ -834,8 +834,8 @@ def main():
             <span class="title">CrewCFO</span>
         </a>
         <div class="navbar-links">
-            <a href="https://app.crewcfo.com" class="navbar-link active">Dashboard</a>
-            <a href="https://valuation.crewcfo.com" class="navbar-link">Valuation</a>
+            <a href="/dashboard" class="navbar-link active">Dashboard</a>
+            <a href="/dashboard" class="navbar-link">Valuation</a>
         </div>
     </div>
     """, unsafe_allow_html=True)

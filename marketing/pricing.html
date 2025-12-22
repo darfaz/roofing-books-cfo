@@ -39,9 +39,9 @@
                 <a href="about.html" class="hover:text-white transition">About</a>
             </div>
             <div class="flex items-center gap-4">
-                <a href="https://app.crewcfo.com" class="text-slate-400 hover:text-white transition">Dashboard</a>
-                <a href="https://app.crewcfo.com" class="text-slate-400 hover:text-white transition">Valuation</a>
-                <a href="https://app.crewcfo.com" class="bg-slate-800 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded-lg transition">Login</a>
+                <a href="/dashboard" class="text-slate-400 hover:text-white transition">Dashboard</a>
+                <a href="/dashboard" class="text-slate-400 hover:text-white transition">Valuation</a>
+                <a href="/dashboard" class="bg-slate-800 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded-lg transition">Login</a>
                 <button onclick="openCalendly()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-lg transition">
                     Book Demo
                 </button>
@@ -263,7 +263,7 @@
     <script>
         const CONFIG = {
             calendlyUrl: 'https://calendly.com/YOUR_CALENDLY_LINK',
-            dashboardUrl: 'https://app.crewcfo.com',
+            dashboardUrl: '/dashboard',
         };
         function openCalendly() { Calendly.initPopupWidget({url: CONFIG.calendlyUrl}); return false; }
         function goToDashboard() { window.location.href = CONFIG.dashboardUrl; }
