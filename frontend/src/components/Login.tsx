@@ -2,11 +2,13 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 
-type AuthStep = 'login' | 'mfa_verify' | 'mfa_enroll'
+type AuthStep = 'login' | 'signup' | 'verify_email' | 'mfa_verify' | 'mfa_enroll'
 
 export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [companyName, setCompanyName] = useState('')
   const [mfaCode, setMfaCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +48,50 @@ export function Login() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const signUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      setLoading(false)
+      return
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      setLoading(false)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            company_name: companyName,
+          },
+          emailRedirectTo: `${window.location.origin}/dashboard`
+        }
+      })
+      if (error) throw error
+
+      // Check if email confirmation is required
+      if (data?.user && !data.session) {
+        setAuthStep('verify_email')
+      }
+      // If session exists, user is logged in (email confirmation disabled)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create account')
     } finally {
       setLoading(false)
     }
@@ -160,9 +206,15 @@ export function Login() {
       <div className="mt-6 pt-6 border-t border-slate-800 text-center space-y-3">
         <p className="text-sm text-slate-500">
           Don't have an account?{' '}
-          <a href={homeUrl} className="text-emerald-400 hover:text-emerald-300 transition">
-            Get started
-          </a>
+          <button
+            onClick={() => {
+              setAuthStep('signup')
+              setError(null)
+            }}
+            className="text-emerald-400 hover:text-emerald-300 transition"
+          >
+            Create one
+          </button>
         </p>
         <a
           href={homeUrl}
@@ -170,6 +222,148 @@ export function Login() {
         >
           ← Back to CrewCFO.com
         </a>
+      </div>
+    </>
+  )
+
+  const renderSignupForm = () => (
+    <>
+      <div className="text-center mb-8">
+        <div className="text-5xl mb-4">🚀</div>
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+          Create Your Account
+        </h1>
+        <p className="text-slate-400 mt-2">Start tracking your business valuation</p>
+      </div>
+
+      <form onSubmit={signUp} className="space-y-4">
+        <div>
+          <label className="block text-sm text-slate-300 mb-2 font-medium">Company Name</label>
+          <input
+            className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition"
+            type="text"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="Your Company LLC"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-slate-300 mb-2 font-medium">Email</label>
+          <input
+            className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm text-slate-300 mb-2 font-medium">Password</label>
+          <input
+            className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            minLength={8}
+          />
+          <p className="text-xs text-slate-500 mt-1">At least 8 characters</p>
+        </div>
+
+        <div>
+          <label className="block text-sm text-slate-300 mb-2 font-medium">Confirm Password</label>
+          <input
+            className="w-full bg-slate-950/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+          />
+        </div>
+
+        <motion.button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold py-3 rounded-xl transition shadow-lg shadow-emerald-500/20"
+          whileHover={{ scale: loading ? 1 : 1.02 }}
+          whileTap={{ scale: loading ? 1 : 0.98 }}
+        >
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+              Creating account...
+            </span>
+          ) : (
+            'Create Account'
+          )}
+        </motion.button>
+      </form>
+
+      <p className="mt-4 text-xs text-slate-500 text-center">
+        By creating an account, you agree to our{' '}
+        <a href={`${homeUrl}terms.html`} className="text-emerald-400 hover:text-emerald-300">
+          Terms of Service
+        </a>{' '}
+        and{' '}
+        <a href={`${homeUrl}privacy.html`} className="text-emerald-400 hover:text-emerald-300">
+          Privacy Policy
+        </a>
+      </p>
+
+      <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+        <p className="text-sm text-slate-500">
+          Already have an account?{' '}
+          <button
+            onClick={() => {
+              setAuthStep('login')
+              setError(null)
+              setConfirmPassword('')
+              setCompanyName('')
+            }}
+            className="text-emerald-400 hover:text-emerald-300 transition"
+          >
+            Sign in
+          </button>
+        </p>
+      </div>
+    </>
+  )
+
+  const renderVerifyEmail = () => (
+    <>
+      <div className="text-center mb-8">
+        <div className="text-5xl mb-4">📧</div>
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+          Check Your Email
+        </h1>
+        <p className="text-slate-400 mt-2">We sent a confirmation link to</p>
+        <p className="text-emerald-400 font-medium mt-1">{email}</p>
+      </div>
+
+      <div className="bg-slate-800/50 rounded-xl p-4 text-sm text-slate-300 space-y-2">
+        <p>Click the link in the email to verify your account and get started.</p>
+        <p className="text-slate-500">Didn't receive it? Check your spam folder.</p>
+      </div>
+
+      <div className="mt-6 pt-6 border-t border-slate-800 text-center">
+        <button
+          onClick={() => {
+            setAuthStep('login')
+            setError(null)
+            setPassword('')
+            setConfirmPassword('')
+            setCompanyName('')
+          }}
+          className="text-sm text-slate-400 hover:text-white transition"
+        >
+          ← Back to login
+        </button>
       </div>
     </>
   )
@@ -356,6 +550,8 @@ export function Login() {
             )}
 
             {authStep === 'login' && renderLoginForm()}
+            {authStep === 'signup' && renderSignupForm()}
+            {authStep === 'verify_email' && renderVerifyEmail()}
             {authStep === 'mfa_verify' && renderMfaVerify()}
             {authStep === 'mfa_enroll' && renderMfaEnroll()}
           </div>
