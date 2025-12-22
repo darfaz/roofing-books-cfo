@@ -112,6 +112,12 @@ export function Header({ userEmail }: HeaderProps) {
             </span>
           )}
           <a
+            href="mailto:support@crewcfo.com"
+            className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
+          >
+            Support
+          </a>
+          <a
             href={homeUrl}
             className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
           >
