@@ -6,6 +6,7 @@ import { ExitReadiness } from './ExitReadiness'
 import { ValuationRoadmap } from './ValuationRoadmap'
 import { ShockReport } from './ShockReport'
 import { OwnerDashboard } from './OwnerDashboard'
+import { FinanceDashboard } from './FinanceDashboard'
 import { Tabs } from './ui/Tabs'
 import { GaugeMeter } from './ui/GaugeMeter'
 import { AnimatedCurrency, AnimatedPercentage } from './ui/AnimatedNumber'
@@ -80,7 +81,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [historicalSnapshots, setHistoricalSnapshots] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
 
   useEffect(() => {
     void fetchValuationData()
@@ -174,6 +175,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const tabOptions = useMemo(
     () => [
       { key: 'dashboard' as const, label: 'Dashboard', icon: '📊' },
+      { key: 'finance' as const, label: 'Finance', icon: '💵' },
       { key: 'overview' as const, label: 'Valuation', icon: '💰' },
       { key: 'shock' as const, label: 'Shock Report', icon: '⚡' },
       { key: 'scenario' as const, label: 'Simulator', icon: '🎮' },
@@ -322,6 +324,16 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 exit={{ opacity: 0, y: -20 }}
               >
                 <OwnerDashboard />
+              </motion.div>
+            )}
+            {activeTab === 'finance' && (
+              <motion.div
+                key="finance"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <FinanceDashboard />
               </motion.div>
             )}
             {activeTab === 'overview' && (

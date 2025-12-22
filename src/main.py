@@ -328,8 +328,469 @@ async def get_cash_forecast(tenant_id: str):
         .order("week_number", desc=False)\
         .limit(13)\
         .execute()
-    
+
     return {"forecast": result.data}
+
+
+# ============================================================
+# FINANCE COMMAND CENTER API
+# ============================================================
+
+@app.get("/api/finance/ap/aging")
+async def get_ap_aging(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get AP aging summary with buckets
+
+    Returns:
+        AP aging by bucket (current, 1-30, 31-60, 61-90, 90+)
+        with total, overdue amount, and bills list
+    """
+    from src.services.finance.ap import APService
+
+    try:
+        ap_service = APService(tenant_id)
+        aging = ap_service.calculate_ap_aging()
+
+        return {
+            "success": True,
+            "data": aging
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get AP aging: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/ap/upcoming")
+async def get_ap_upcoming_payments(
+    tenant_id: str = Depends(get_current_tenant_id),
+    days_ahead: int = 30
+):
+    """
+    Get upcoming AP payments for cash planning
+
+    Args:
+        days_ahead: Number of days to look ahead (default: 30)
+
+    Returns:
+        List of bills due in the next N days
+    """
+    from src.services.finance.ap import APService
+
+    try:
+        ap_service = APService(tenant_id)
+        upcoming = ap_service.get_upcoming_payments(days_ahead=days_ahead)
+
+        return {
+            "success": True,
+            "data": {
+                "days_ahead": days_ahead,
+                "payments": upcoming,
+                "total": sum(p["amount"] for p in upcoming),
+                "count": len(upcoming)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get upcoming payments: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/ap/by-vendor")
+async def get_ap_by_vendor(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get AP summary by vendor
+
+    Returns:
+        List of vendors with their AP totals
+    """
+    from src.services.finance.ap import APService
+
+    try:
+        ap_service = APService(tenant_id)
+        summary = ap_service.get_vendor_summary()
+
+        return {
+            "success": True,
+            "data": {
+                "vendors": summary,
+                "total": sum(v["total"] for v in summary)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get vendor summary: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/ap/metrics")
+async def get_ap_metrics(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get key AP metrics for dashboard cards
+    """
+    from src.services.finance.ap import APService
+
+    try:
+        ap_service = APService(tenant_id)
+        metrics = ap_service.get_ap_metrics()
+
+        return {
+            "success": True,
+            "data": metrics
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get AP metrics: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/cash-forecast")
+async def get_13_week_cash_forecast(
+    tenant_id: str = Depends(get_current_tenant_id),
+    scenario: str = "base"
+):
+    """
+    Get 13-week rolling cash flow forecast
+
+    Args:
+        scenario: "optimistic", "base", or "pessimistic"
+
+    Returns:
+        Complete forecast with weekly projections
+    """
+    from src.services.finance.cash_forecast import CashFlowForecastService
+
+    try:
+        if scenario not in ["base", "optimistic", "pessimistic"]:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Scenario must be 'base', 'optimistic', or 'pessimistic'"
+                    }
+                }
+            )
+
+        forecast_service = CashFlowForecastService(tenant_id)
+        forecast = forecast_service.generate_13_week_forecast(scenario=scenario)
+
+        return {
+            "success": True,
+            "data": forecast
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to generate cash forecast: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/cash-forecast/all-scenarios")
+async def get_all_cash_forecast_scenarios(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get 13-week cash forecast for all three scenarios
+
+    Returns:
+        Base, optimistic, and pessimistic forecasts
+    """
+    from src.services.finance.cash_forecast import CashFlowForecastService
+
+    try:
+        forecast_service = CashFlowForecastService(tenant_id)
+        all_scenarios = forecast_service.get_all_scenarios()
+
+        return {
+            "success": True,
+            "data": all_scenarios
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to generate forecasts: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/cash-forecast/alert")
+async def get_cash_alert_status(tenant_id: str = Depends(get_current_tenant_id)):
+    """
+    Get cash position health status for dashboard
+
+    Returns:
+        Status (healthy/good/caution/critical) with recommendations
+    """
+    from src.services.finance.cash_forecast import CashFlowForecastService
+
+    try:
+        forecast_service = CashFlowForecastService(tenant_id)
+        alert = forecast_service.get_cash_alert_status()
+
+        return {
+            "success": True,
+            "data": alert
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get cash alert: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/budget/variance")
+async def get_budget_variance(
+    tenant_id: str = Depends(get_current_tenant_id),
+    year: int = None,
+    month: int = None
+):
+    """
+    Get budget vs actual variance for a month
+
+    Args:
+        year: Year (defaults to current)
+        month: Month 1-12 (defaults to current)
+
+    Returns:
+        Variance analysis by category
+    """
+    from src.services.finance.budget import BudgetService
+    from datetime import date
+
+    try:
+        if not year:
+            year = date.today().year
+        if not month:
+            month = date.today().month
+
+        if month < 1 or month > 12:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "Month must be between 1 and 12"
+                    }
+                }
+            )
+
+        budget_service = BudgetService(tenant_id)
+        variance = budget_service.calculate_variance(year, month)
+
+        return {
+            "success": True,
+            "data": variance
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get variance: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/budget/ytd")
+async def get_budget_ytd(
+    tenant_id: str = Depends(get_current_tenant_id),
+    year: int = None,
+    through_month: int = None
+):
+    """
+    Get year-to-date budget performance
+
+    Args:
+        year: Year (defaults to current)
+        through_month: Last month to include (defaults to current)
+
+    Returns:
+        YTD variance analysis
+    """
+    from src.services.finance.budget import BudgetService
+    from datetime import date
+
+    try:
+        if not year:
+            year = date.today().year
+        if not through_month:
+            through_month = date.today().month
+
+        budget_service = BudgetService(tenant_id)
+        ytd = budget_service.get_ytd_performance(year, through_month)
+
+        return {
+            "success": True,
+            "data": ytd
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get YTD performance: {str(e)}"
+                }
+            }
+        )
+
+
+@app.get("/api/finance/budget/metrics")
+async def get_budget_metrics(
+    tenant_id: str = Depends(get_current_tenant_id),
+    year: int = None,
+    month: int = None
+):
+    """
+    Get key budget metrics for dashboard display
+
+    Returns:
+        Status, monthly actuals vs budget, YTD, and top overages
+    """
+    from src.services.finance.budget import BudgetService
+
+    try:
+        budget_service = BudgetService(tenant_id)
+        metrics = budget_service.get_dashboard_metrics(year, month)
+
+        return {
+            "success": True,
+            "data": metrics
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to get budget metrics: {str(e)}"
+                }
+            }
+        )
+
+
+@app.post("/api/finance/budget")
+async def save_budget(
+    tenant_id: str = Depends(get_current_tenant_id),
+    request_body: dict = Body(...)
+):
+    """
+    Save or update budget for a month
+
+    Request body:
+        year: Budget year
+        month: Budget month (1-12)
+        categories: Budget categories with amounts
+
+    Returns:
+        Saved budget data
+    """
+    from src.services.finance.budget import BudgetService
+
+    try:
+        year = request_body.get("year")
+        month = request_body.get("month")
+        categories = request_body.get("categories")
+
+        if not year or not month:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "year and month are required"
+                    }
+                }
+            )
+
+        if not categories:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": "categories are required"
+                    }
+                }
+            )
+
+        budget_service = BudgetService(tenant_id)
+        budget = budget_service.save_budget(year, month, categories)
+
+        return {
+            "success": True,
+            "data": budget
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": f"Failed to save budget: {str(e)}"
+                }
+            }
+        )
 
 # ============================================================
 # CHART OF ACCOUNTS
