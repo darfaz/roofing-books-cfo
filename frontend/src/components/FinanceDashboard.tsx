@@ -13,7 +13,7 @@ import {
   Cell,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { GlassCard, MetricCard, ProgressCard } from './ui/GlassCard'
+import { GlassCard, MetricCard } from './ui/GlassCard'
 import { AnimatedCurrency } from './ui/AnimatedNumber'
 
 // Types
@@ -389,7 +389,7 @@ export function FinanceDashboard() {
                     boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
                   }}
                   labelStyle={{ color: '#94a3b8' }}
-                  formatter={(value: number) => [formatCurrency(value), '']}
+                  formatter={(value) => [formatCurrency(value as number), '']}
                 />
                 <Legend />
                 <Area
@@ -464,7 +464,7 @@ export function FinanceDashboard() {
                       border: '1px solid #334155',
                       borderRadius: '8px',
                     }}
-                    formatter={(value: number) => [formatCurrency(value), 'Amount']}
+                    formatter={(value) => [formatCurrency(value as number), 'Amount']}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                     {apChartData.map((entry, index) => (
