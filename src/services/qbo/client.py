@@ -182,7 +182,35 @@ class QBOClient:
         if "Fault" in query_response:
             error = query_response["Fault"]
             raise ValueError(f"QBO Query Error: {error}")
-        return query_response.get("entities", [])
+
+        # QBO returns data keyed by entity type name (e.g., "Purchase", "Invoice", "Account")
+        # Extract the entity type from the query string to find the right key
+        # Query format: "SELECT * FROM EntityName WHERE..."
+        entity_type = None
+        query_upper = query_string.upper()
+        if " FROM " in query_upper:
+            # Extract entity name after FROM
+            from_idx = query_upper.index(" FROM ") + 6
+            rest = query_string[from_idx:].strip()
+            # Entity name ends at space or end of string
+            entity_type = rest.split()[0] if rest else None
+
+        # Try to get data using the entity type key
+        if entity_type and entity_type in query_response:
+            return query_response[entity_type]
+
+        # Fallback: try common entity names or return first list found
+        for key in ["Purchase", "Invoice", "Deposit", "Bill", "Account", "CompanyInfo", "Vendor", "Customer"]:
+            if key in query_response:
+                result = query_response[key]
+                return result if isinstance(result, list) else [result]
+
+        # Last resort: find any list in the response
+        for key, value in query_response.items():
+            if isinstance(value, list):
+                return value
+
+        return []
     
     def get_accounts(self) -> List[Dict]:
         """Get chart of accounts"""
