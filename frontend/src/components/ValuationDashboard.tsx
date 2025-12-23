@@ -82,6 +82,8 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
+  const [qboConnected, setQboConnected] = useState<boolean | null>(null)
+  const [creatingSnapshot, setCreatingSnapshot] = useState(false)
 
   useEffect(() => {
     void fetchValuationData()
@@ -101,6 +103,16 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
         setError('No tenant_id found in user metadata')
         return
       }
+
+      // Check QBO connection status
+      const { data: integrationData } = await supabase
+        .from('tenant_integrations')
+        .select('is_active')
+        .eq('tenant_id', tenantId)
+        .eq('provider', 'quickbooks')
+        .single()
+
+      setQboConnected(integrationData?.is_active === true)
 
       // Fetch latest snapshot directly from Supabase
       const { data: snapshotData, error: snapshotError } = await supabase
@@ -142,6 +154,34 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
       setError(err instanceof Error ? err.message : 'Failed to load valuation data')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const createValuationSnapshot = async () => {
+    try {
+      setCreatingSnapshot(true)
+      setError(null)
+
+      const response = await fetch('/api/valuation/snapshot', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error?.message || 'Failed to create snapshot')
+      }
+
+      // Refresh data after creating snapshot
+      await fetchValuationData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create valuation snapshot')
+    } finally {
+      setCreatingSnapshot(false)
     }
   }
 
@@ -252,18 +292,47 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-6">
         <div className="max-w-7xl mx-auto">
-          <GlassCard padding="lg" className="text-center">
+          <GlassCard padding="lg" className="text-center max-w-xl mx-auto">
             <div className="text-5xl mb-4">📊</div>
-            <h2 className="text-2xl font-bold mb-2">No Valuation Snapshot Yet</h2>
-            <p className="text-slate-400 mb-6">Create a snapshot via the API to populate the dashboard.</p>
-            <motion.button
-              onClick={() => void fetchValuationData()}
-              className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-6 py-3 rounded-lg transition"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              Refresh
-            </motion.button>
+            <h2 className="text-2xl font-bold mb-2">Welcome to Your Dashboard</h2>
+
+            {qboConnected ? (
+              <>
+                <p className="text-slate-400 mb-6">
+                  QuickBooks is connected. Create your first valuation snapshot to see your business valuation.
+                </p>
+                {error && (
+                  <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-sm p-3 rounded-lg mb-4">
+                    {error}
+                  </div>
+                )}
+                <motion.button
+                  onClick={() => void createValuationSnapshot()}
+                  disabled={creatingSnapshot}
+                  className="bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-semibold px-6 py-3 rounded-lg transition"
+                  whileHover={{ scale: creatingSnapshot ? 1 : 1.05 }}
+                  whileTap={{ scale: creatingSnapshot ? 1 : 0.95 }}
+                >
+                  {creatingSnapshot ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                      Creating Snapshot...
+                    </span>
+                  ) : (
+                    'Create Valuation Snapshot'
+                  )}
+                </motion.button>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-400 mb-6">
+                  Connect your QuickBooks Online account to analyze your financials and get your business valuation.
+                </p>
+                <p className="text-sm text-slate-500">
+                  Use the "Connect QuickBooks" button in the header to get started.
+                </p>
+              </>
+            )}
           </GlassCard>
         </div>
       </div>
