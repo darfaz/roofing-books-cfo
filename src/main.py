@@ -175,6 +175,40 @@ async def qbo_callback(code: str, state: str, realmId: str):
     # Redirect to the return URL (dashboard)
     return RedirectResponse(url=return_url, status_code=302)
 
+
+@app.get("/api/qbo/status")
+async def get_qbo_status(tenant_id: str):
+    """
+    Check QuickBooks connection status for a tenant
+
+    Returns:
+        connected: bool - whether QBO is connected
+        realm_id: str - QBO company ID (if connected)
+        expires_at: str - token expiration time (if connected)
+    """
+    result = supabase.table("tenant_integrations")\
+        .select("realm_id, is_active, token_expires_at, created_at, updated_at")\
+        .eq("tenant_id", tenant_id)\
+        .eq("provider", "quickbooks")\
+        .limit(1)\
+        .execute()
+
+    if not result.data:
+        return {
+            "connected": False,
+            "message": "No QuickBooks integration found for this tenant"
+        }
+
+    integration = result.data[0]
+    return {
+        "connected": integration.get("is_active", False),
+        "realm_id": integration.get("realm_id"),
+        "token_expires_at": integration.get("token_expires_at"),
+        "created_at": integration.get("created_at"),
+        "updated_at": integration.get("updated_at")
+    }
+
+
 # ============================================================
 # TRANSACTIONS
 # ============================================================
