@@ -75,24 +75,28 @@ QBO_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2"
 QBO_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 
 @app.get("/auth/qbo/connect")
-async def qbo_connect(tenant_id: str):
+async def qbo_connect(tenant_id: str, return_url: str = "/dashboard"):
     """
     Start QuickBooks OAuth flow
-    
-    Usage: GET /auth/qbo/connect?tenant_id=YOUR_TENANT_UUID
+
+    Usage: GET /auth/qbo/connect?tenant_id=YOUR_TENANT_UUID&return_url=/dashboard
     """
+    import base64
+    import json
+
     client_id = os.getenv("QBO_CLIENT_ID")
     redirect_uri = os.getenv("QBO_REDIRECT_URI")
-    
+
     if not client_id or not redirect_uri:
         raise HTTPException(500, "QBO credentials not configured")
-    
-    # Store tenant_id in state for callback
-    state = tenant_id
-    
+
+    # Store tenant_id and return_url in state (base64 encoded JSON)
+    state_data = {"tenant_id": tenant_id, "return_url": return_url}
+    state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
     # Scopes needed for bookkeeping
     scopes = "com.intuit.quickbooks.accounting"
-    
+
     auth_url = (
         f"{QBO_AUTH_URL}?"
         f"client_id={client_id}&"
@@ -101,22 +105,33 @@ async def qbo_connect(tenant_id: str):
         f"scope={scopes}&"
         f"state={state}"
     )
-    
+
     return RedirectResponse(auth_url)
 
 @app.get("/auth/qbo/callback")
 async def qbo_callback(code: str, state: str, realmId: str):
     """
     QuickBooks OAuth callback
-    
+
     Intuit redirects here after user authorizes
     """
+    import base64
+    import json
+
     client_id = os.getenv("QBO_CLIENT_ID")
     client_secret = os.getenv("QBO_CLIENT_SECRET")
     redirect_uri = os.getenv("QBO_REDIRECT_URI")
-    
-    tenant_id = state  # We stored tenant_id in state
-    
+
+    # Decode state to get tenant_id and return_url
+    try:
+        state_data = json.loads(base64.urlsafe_b64decode(state).decode())
+        tenant_id = state_data.get("tenant_id")
+        return_url = state_data.get("return_url", "/dashboard")
+    except Exception:
+        # Fallback for old-style state (just tenant_id)
+        tenant_id = state
+        return_url = "/dashboard"
+
     # Exchange code for tokens
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -129,18 +144,18 @@ async def qbo_callback(code: str, state: str, realmId: str):
             auth=(client_id, client_secret),
             headers={"Accept": "application/json"}
         )
-    
+
     if response.status_code != 200:
         raise HTTPException(400, f"Token exchange failed: {response.text}")
-    
+
     tokens = response.json()
-    
+
     # Calculate token expiration
     expires_in = tokens.get("expires_in", 3600)  # Default to 1 hour if not provided
     token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
-    
+
     # Store tokens in Supabase (upsert on tenant_id + provider)
-    result = supabase.table("tenant_integrations").upsert(
+    supabase.table("tenant_integrations").upsert(
         {
             "tenant_id": tenant_id,
             "provider": "quickbooks",
@@ -156,13 +171,9 @@ async def qbo_callback(code: str, state: str, realmId: str):
         },
         on_conflict="tenant_id,provider"
     ).execute()
-    
-    return {
-        "status": "connected",
-        "tenant_id": tenant_id,
-        "realm_id": realmId,
-        "message": "QuickBooks connected successfully!"
-    }
+
+    # Redirect to the return URL (dashboard)
+    return RedirectResponse(url=return_url, status_code=302)
 
 # ============================================================
 # TRANSACTIONS
