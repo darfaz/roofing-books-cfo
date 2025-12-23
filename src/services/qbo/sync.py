@@ -24,25 +24,27 @@ class QBOSyncService:
         )
     
     def sync_transactions(
-        self, 
-        start_date: Optional[str] = None, 
+        self,
+        start_date: Optional[str] = None,
         end_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Sync all transaction types from QBO to Supabase
-        
+
         Args:
-            start_date: Start date in YYYY-MM-DD format (defaults to 30 days ago)
-            end_date: End date in YYYY-MM-DD format (defaults to today)
-        
+            start_date: Start date in YYYY-MM-DD format (defaults to 1 year ago)
+            end_date: End date in YYYY-MM-DD format (defaults to 1 year from now, for sandbox data)
+
         Returns:
             Dict with sync results: count, transactions, errors
         """
         today = datetime.now().date()
         if not start_date:
-            start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+            # Go back 1 year to catch historical data
+            start_date = (today - timedelta(days=365)).strftime("%Y-%m-%d")
         if not end_date:
-            end_date = today.strftime("%Y-%m-%d")
+            # Go forward 1 year to catch sandbox data with future dates
+            end_date = (today + timedelta(days=365)).strftime("%Y-%m-%d")
         
         all_transactions = []
         errors = []
