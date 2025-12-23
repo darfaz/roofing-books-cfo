@@ -209,6 +209,55 @@ async def get_qbo_status(tenant_id: str):
     }
 
 
+@app.get("/api/qbo/debug")
+async def debug_qbo_data(tenant_id: str, entity_type: str = "Purchase"):
+    """
+    Debug endpoint to query QBO directly and see raw response
+
+    Args:
+        tenant_id: Tenant UUID
+        entity_type: QBO entity type to query (Purchase, Invoice, Deposit, Account, Bill)
+
+    Returns:
+        Raw QBO query response for debugging
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+
+        # Query without date filter first to see all data
+        query_str = f"SELECT * FROM {entity_type} MAXRESULTS 10"
+        results = client.query(query_str)
+
+        # Also get company info
+        company_info = {}
+        try:
+            company_info = client.get_company_info()
+        except Exception as e:
+            company_info = {"error": str(e)}
+
+        return {
+            "success": True,
+            "company_info": company_info,
+            "entity_type": entity_type,
+            "query": query_str,
+            "count": len(results),
+            "results": results[:10]  # Limit to 10 for debugging
+        }
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+
 # ============================================================
 # TRANSACTIONS
 # ============================================================
