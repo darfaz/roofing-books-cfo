@@ -88,9 +88,11 @@ interface BudgetVariance {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+interface FinanceDashboardProps {
+  accessToken: string
+}
 
-export function FinanceDashboard() {
+export function FinanceDashboard({ accessToken }: FinanceDashboardProps) {
   const [cashAlert, setCashAlert] = useState<CashAlertStatus | null>(null)
   const [allScenarios, setAllScenarios] = useState<{
     base: CashForecast
@@ -119,12 +121,17 @@ export function FinanceDashboard() {
         return
       }
 
+      const headers = {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+
       // Fetch all finance data in parallel
       const [alertRes, scenariosRes, apRes, budgetRes] = await Promise.all([
-        fetch(`${API_BASE}/api/finance/cash-forecast/alert?tenant_id=${tenantId}`),
-        fetch(`${API_BASE}/api/finance/cash-forecast/all-scenarios?tenant_id=${tenantId}`),
-        fetch(`${API_BASE}/api/finance/ap/aging?tenant_id=${tenantId}`),
-        fetch(`${API_BASE}/api/finance/budget/variance?tenant_id=${tenantId}`),
+        fetch(`/api/finance/cash-forecast/alert?tenant_id=${tenantId}`, { headers }),
+        fetch(`/api/finance/cash-forecast/all-scenarios?tenant_id=${tenantId}`, { headers }),
+        fetch(`/api/finance/ap/aging?tenant_id=${tenantId}`, { headers }),
+        fetch(`/api/finance/budget/variance?tenant_id=${tenantId}`, { headers }),
       ])
 
       if (alertRes.ok) {

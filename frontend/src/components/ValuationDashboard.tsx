@@ -402,7 +402,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <FinanceDashboard />
+                <FinanceDashboard accessToken={accessToken} />
               </motion.div>
             )}
             {activeTab === 'overview' && (
