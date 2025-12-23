@@ -6,8 +6,8 @@ import os
 from typing import Optional
 from pydantic import BaseModel, Field
 from langchain_anthropic import ChatAnthropic
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
