@@ -6,7 +6,7 @@ import os
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from services.classification.agent import ClassificationAgent, TransactionClassification
+from src.services.classification.agent import ClassificationAgent, TransactionClassification
 
 load_dotenv()
 
