@@ -5,6 +5,7 @@ import { ScenarioSimulator } from './ScenarioSimulator'
 import { ExitReadiness } from './ExitReadiness'
 import { ValuationRoadmap } from './ValuationRoadmap'
 import { ShockReport } from './ShockReport'
+import { ProfitLeakReport } from './ProfitLeakReport'
 import { OwnerDashboard } from './OwnerDashboard'
 import { FinanceDashboard } from './FinanceDashboard'
 import { Tabs } from './ui/Tabs'
@@ -81,7 +82,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [historicalSnapshots, setHistoricalSnapshots] = useState<ValuationSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'overview' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'overview' | 'leaks' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
   const [qboConnected, setQboConnected] = useState<boolean | null>(null)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
 
@@ -217,6 +218,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
       { key: 'dashboard' as const, label: 'Dashboard', icon: '📊' },
       { key: 'finance' as const, label: 'Finance', icon: '💵' },
       { key: 'overview' as const, label: 'Valuation', icon: '💰' },
+      { key: 'leaks' as const, label: 'Profit Leaks', icon: '🔍' },
       { key: 'shock' as const, label: 'Shock Report', icon: '⚡' },
       { key: 'scenario' as const, label: 'Simulator', icon: '🎮' },
       { key: 'exit' as const, label: 'Exit Readiness', icon: '🚀' },
@@ -548,6 +550,17 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                     </div>
                   )}
                 </GlassCard>
+              </motion.div>
+            )}
+
+            {activeTab === 'leaks' && (
+              <motion.div
+                key="leaks"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <ProfitLeakReport accessToken={accessToken} />
               </motion.div>
             )}
 

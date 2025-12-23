@@ -1014,12 +1014,12 @@ async def classify_transactions_batch(
 ):
     """
     Classify unclassified transactions in batch
-    
+
     Args:
         tenant_id: Tenant UUID
         limit: Maximum number of transactions to classify
         transaction_types: Optional list of transaction types to filter
-    
+
     Returns:
         Classification results
     """
@@ -1034,6 +1034,340 @@ async def classify_transactions_batch(
         return result
     except Exception as e:
         raise HTTPException(500, f"Classification error: {str(e)}")
+
+
+# ============================================================
+# PAYROLL DATA API
+# ============================================================
+
+@app.get("/api/qbo/payroll/accounts")
+async def get_payroll_accounts(tenant_id: str):
+    """
+    Get all payroll-related accounts from QuickBooks Chart of Accounts.
+
+    Identifies accounts by:
+    - AccountSubType (PayrollExpenses, PayrollTaxExpenses, etc.)
+    - Account names containing payroll keywords
+
+    Returns:
+        List of payroll accounts with classifications
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+        accounts = client.get_payroll_accounts()
+
+        return {
+            "success": True,
+            "data": {
+                "accounts": accounts,
+                "count": len(accounts)
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"QBO Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get payroll accounts: {str(e)}")
+
+
+@app.get("/api/qbo/payroll/transactions")
+async def get_payroll_transactions(
+    tenant_id: str,
+    start_date: str = None,
+    end_date: str = None
+):
+    """
+    Get all transactions posted to payroll-related accounts.
+
+    This captures payroll expenses from:
+    - Direct payroll entries from QBO Payroll
+    - Journal entries from external payroll (Gusto, ADP)
+    - Manual payroll entries
+
+    Args:
+        tenant_id: Tenant UUID
+        start_date: Start date YYYY-MM-DD (defaults to 1 year ago)
+        end_date: End date YYYY-MM-DD (defaults to today)
+
+    Returns:
+        List of payroll transactions with account details
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+        transactions = client.get_payroll_transactions(start_date, end_date)
+
+        return {
+            "success": True,
+            "data": {
+                "transactions": transactions,
+                "count": len(transactions)
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"QBO Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get payroll transactions: {str(e)}")
+
+
+@app.get("/api/qbo/payroll/summary")
+async def get_payroll_summary(
+    tenant_id: str,
+    start_date: str = None,
+    end_date: str = None
+):
+    """
+    Get summarized payroll data for analysis and overhead calculation.
+
+    Returns:
+        - Total payroll expense
+        - Breakdown by classification (wages, taxes, benefits, workers comp)
+        - Monthly trend
+        - Average monthly payroll (for break-even calculation)
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+        summary = client.get_payroll_summary(start_date, end_date)
+
+        return {
+            "success": True,
+            "data": summary
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"QBO Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get payroll summary: {str(e)}")
+
+
+@app.get("/api/qbo/overhead/summary")
+async def get_overhead_summary(tenant_id: str):
+    """
+    Get comprehensive overhead analysis with break-even calculation.
+
+    This is the foundation for the $99 Profit Leak Report.
+
+    Automatically classifies ALL expense accounts as:
+    - OVERHEAD: Fixed costs (rent, utilities, admin payroll, insurance, etc.)
+    - JOB COSTS: Variable costs (materials, labor, subs, equipment rental)
+
+    Returns:
+        - Total overhead by category
+        - Job costs by category
+        - Calculated gross margin from actual data
+        - Break-even at current and scenario margins
+        - Confidence scores for classification accuracy
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+        analysis = client.get_overhead_analysis()
+
+        return {
+            "success": True,
+            "data": analysis
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"QBO Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get overhead analysis: {str(e)}")
+
+
+@app.get("/api/qbo/expenses/classified")
+async def get_expenses_classified(tenant_id: str):
+    """
+    Get all expense accounts with overhead vs job cost classification.
+
+    Each account is classified as:
+    - overhead: Fixed costs that don't scale with jobs
+    - job_cost: Variable costs that scale with job volume
+    - mixed: Needs manual review
+
+    Includes confidence score and classification reasoning.
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+        accounts = client.get_expense_accounts_classified()
+
+        # Group by classification
+        overhead = [a for a in accounts if a["classification"] == "overhead"]
+        job_cost = [a for a in accounts if a["classification"] == "job_cost"]
+        mixed = [a for a in accounts if a["classification"] == "mixed"]
+
+        return {
+            "success": True,
+            "data": {
+                "accounts": accounts,
+                "summary": {
+                    "overhead_count": len(overhead),
+                    "job_cost_count": len(job_cost),
+                    "mixed_count": len(mixed),
+                    "total": len(accounts)
+                },
+                "by_classification": {
+                    "overhead": overhead,
+                    "job_cost": job_cost,
+                    "mixed": mixed
+                }
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"QBO Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Failed to classify expenses: {str(e)}")
+
+
+@app.get("/api/qbo/profit-leak-report")
+async def get_profit_leak_report(tenant_id: str):
+    """
+    Generate the $99 Instant Profit Leak Report.
+
+    This is the tripwire offer deliverable - shows:
+    1. Break-even floor (monthly revenue needed to cover overhead)
+    2. True overhead run-rate by category
+    3. Top profit leaks ranked by $ impact
+    4. Gross margin from actual job cost data
+
+    The report identifies where money is leaking and
+    quantifies the opportunity to recover it.
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+
+        # Get comprehensive overhead analysis
+        analysis = client.get_overhead_analysis()
+
+        # Get company info
+        company_info = client.get_company_info()
+
+        # Get cash position
+        cash_balance = client.get_cash_accounts_balance()
+
+        # Identify profit leaks (overhead categories that are high relative to revenue)
+        profit_leaks = []
+        overhead_cats = analysis["overhead"]["by_category"]
+        monthly_revenue = analysis["revenue"]["monthly_average"]
+
+        for category, amount in overhead_cats.items():
+            if monthly_revenue > 0:
+                pct_of_revenue = (amount / analysis["period"]["months"]) / monthly_revenue
+                # Flag if overhead category is > 5% of revenue (except rent which can be higher)
+                threshold = 0.10 if category == "rent" else 0.05
+                if pct_of_revenue > threshold:
+                    profit_leaks.append({
+                        "category": category,
+                        "monthly_amount": round(amount / analysis["period"]["months"], 2),
+                        "annual_impact": round(amount, 2),
+                        "pct_of_revenue": round(pct_of_revenue * 100, 1),
+                        "severity": "high" if pct_of_revenue > threshold * 2 else "medium",
+                        "recommendation": _get_leak_recommendation(category, pct_of_revenue)
+                    })
+
+        # Sort by annual impact
+        profit_leaks.sort(key=lambda x: -x["annual_impact"])
+
+        # Calculate key metrics
+        break_even = analysis["break_even"]["current_margin"]
+        gross_margin = analysis["profitability"]["gross_margin"]
+
+        # Determine overall health
+        if gross_margin >= 0.35:
+            margin_health = "healthy"
+            margin_message = "Your gross margin is strong for the roofing industry."
+        elif gross_margin >= 0.25:
+            margin_health = "average"
+            margin_message = "Your gross margin is average. There's room for improvement."
+        else:
+            margin_health = "concerning"
+            margin_message = "Your gross margin is below industry average. Review job pricing and costs."
+
+        return {
+            "success": True,
+            "data": {
+                "company": company_info.get("company_name", "Your Company"),
+                "report_date": datetime.utcnow().isoformat(),
+                "period": analysis["period"],
+
+                "executive_summary": {
+                    "monthly_break_even": break_even["monthly"],
+                    "annual_break_even": break_even["annual"],
+                    "current_gross_margin": analysis["profitability"]["gross_margin_pct"],
+                    "margin_health": margin_health,
+                    "margin_message": margin_message,
+                    "cash_position": round(cash_balance, 2),
+                    "total_profit_leaks": len(profit_leaks),
+                    "annual_leak_potential": round(sum(l["annual_impact"] for l in profit_leaks), 2)
+                },
+
+                "break_even_analysis": {
+                    "your_break_even": break_even,
+                    "scenarios": analysis["break_even"]["scenarios"],
+                    "insight": f"You need ${break_even['monthly']:,.0f}/month in revenue just to cover overhead. Every dollar below this is a loss."
+                },
+
+                "overhead_breakdown": {
+                    "monthly_total": analysis["overhead"]["monthly_average"],
+                    "by_category": {
+                        k: round(v / analysis["period"]["months"], 2)
+                        for k, v in analysis["overhead"]["by_category"].items()
+                    },
+                    "transaction_count": analysis["overhead"]["transaction_count"]
+                },
+
+                "job_cost_breakdown": {
+                    "monthly_total": analysis["job_costs"]["monthly_average"],
+                    "by_category": {
+                        k: round(v / analysis["period"]["months"], 2)
+                        for k, v in analysis["job_costs"]["by_category"].items()
+                    },
+                    "transaction_count": analysis["job_costs"]["transaction_count"]
+                },
+
+                "profit_leaks": profit_leaks[:5],  # Top 5 leaks
+
+                "next_steps": [
+                    "Review the top profit leaks and their recommendations",
+                    "Compare your break-even to your average monthly revenue",
+                    "Schedule a 90-day Profit Leak Proofing engagement to fix these issues"
+                ],
+
+                "classification_confidence": analysis["confidence"],
+
+                "needs_review": {
+                    "count": analysis["mixed_expenses"]["count"],
+                    "total": analysis["mixed_expenses"]["total"],
+                    "note": analysis["mixed_expenses"]["note"]
+                }
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(400, f"QBO Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(500, f"Failed to generate profit leak report: {str(e)}")
+
+
+def _get_leak_recommendation(category: str, pct_of_revenue: float) -> str:
+    """Get recommendation for a profit leak category."""
+    recommendations = {
+        "professional_fees": "Review if all legal/accounting services are necessary. Consider fixed-fee arrangements.",
+        "marketing": "Audit marketing spend ROI. Focus on channels with proven lead generation.",
+        "insurance": "Shop insurance annually. Bundle policies. Review coverage for unnecessary riders.",
+        "utilities": "Audit utility usage. Consider energy efficiency upgrades. Negotiate rates.",
+        "rent": "If lease is ending, negotiate or consider relocation. Sublease unused space.",
+        "office": "Review subscriptions and supplies. Eliminate unused services.",
+        "admin_payroll": "Audit admin roles. Consider automation for repetitive tasks.",
+        "other_overhead": "Review and categorize these expenses. Many may be reducible.",
+        "depreciation": "This is non-cash. Focus on other categories for immediate savings.",
+    }
+    return recommendations.get(category, "Review this category for potential savings opportunities.")
 
 # ============================================================
 # VALUATION API
