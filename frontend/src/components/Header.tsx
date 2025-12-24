@@ -180,12 +180,6 @@ export function Header({ userEmail }: HeaderProps) {
           >
             Support
           </a>
-          <a
-            href={homeUrl}
-            className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
-          >
-            Home
-          </a>
           <button
             onClick={() => void handleLogout()}
             className="text-sm text-slate-400 hover:text-white transition bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg"
