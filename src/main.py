@@ -176,6 +176,49 @@ async def qbo_callback(code: str, state: str, realmId: str):
     return RedirectResponse(url=return_url, status_code=302)
 
 
+@app.post("/auth/qbo/disconnect")
+async def qbo_disconnect(tenant_id: str):
+    """
+    Disconnect QuickBooks integration for a tenant.
+
+    This revokes the connection and deletes stored tokens,
+    allowing the user to connect a different QBO account.
+    """
+    # First, try to revoke the token with Intuit (best practice)
+    try:
+        result = supabase.table("tenant_integrations")\
+            .select("access_token, refresh_token")\
+            .eq("tenant_id", tenant_id)\
+            .eq("provider", "quickbooks")\
+            .single()\
+            .execute()
+
+        if result.data and result.data.get("refresh_token"):
+            # Revoke token with Intuit
+            client_id = os.getenv("QBO_CLIENT_ID")
+            client_secret = os.getenv("QBO_CLIENT_SECRET")
+
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "https://developer.api.intuit.com/v2/oauth2/tokens/revoke",
+                    data={"token": result.data["refresh_token"]},
+                    auth=(client_id, client_secret),
+                    headers={"Accept": "application/json"}
+                )
+    except Exception:
+        # Continue even if revocation fails - we still want to clear local tokens
+        pass
+
+    # Delete the integration record
+    supabase.table("tenant_integrations")\
+        .delete()\
+        .eq("tenant_id", tenant_id)\
+        .eq("provider", "quickbooks")\
+        .execute()
+
+    return {"success": True, "message": "QuickBooks disconnected successfully"}
+
+
 @app.get("/api/qbo/status")
 async def get_qbo_status(tenant_id: str):
     """

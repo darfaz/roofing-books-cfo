@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 
@@ -10,6 +10,22 @@ export function Header({ userEmail }: HeaderProps) {
   const [qboConnected, setQboConnected] = useState<boolean | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [showQboMenu, setShowQboMenu] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const qboMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close QBO menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (qboMenuRef.current && !qboMenuRef.current.contains(event.target as Node)) {
+        setShowQboMenu(false)
+      }
+    }
+    if (showQboMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showQboMenu])
 
   useEffect(() => {
     const checkQboStatus = async () => {
@@ -51,6 +67,24 @@ export function Header({ userEmail }: HeaderProps) {
     window.location.href = `/auth/qbo/connect?tenant_id=${tenantId}&return_url=${encodeURIComponent(returnUrl)}`
   }
 
+  const handleDisconnectQbo = async () => {
+    if (!tenantId) return
+    setDisconnecting(true)
+    try {
+      const response = await fetch(`/api/auth/qbo/disconnect?tenant_id=${tenantId}`, {
+        method: 'POST',
+      })
+      if (response.ok) {
+        setQboConnected(false)
+        setShowQboMenu(false)
+      }
+    } catch (error) {
+      console.error('Failed to disconnect QBO:', error)
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
   const homeUrl = import.meta.env.PROD ? 'https://crewcfo.com' : '/'
 
   return (
@@ -75,15 +109,44 @@ export function Header({ userEmail }: HeaderProps) {
           {qboConnected === null ? (
             <span className="text-xs text-slate-500">...</span>
           ) : qboConnected ? (
-            <button
-              className="flex items-center gap-2 text-sm bg-[#2CA01C] text-white font-medium px-4 py-2 rounded-lg cursor-default"
-              title="QuickBooks Online is connected"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              QuickBooks Connected
-            </button>
+            <div className="relative" ref={qboMenuRef}>
+              <button
+                onClick={() => setShowQboMenu(!showQboMenu)}
+                className="flex items-center gap-2 text-sm bg-[#2CA01C] hover:bg-[#248a17] text-white font-medium px-4 py-2 rounded-lg transition"
+                title="QuickBooks Online is connected - click for options"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                QuickBooks Connected
+                <svg className={`w-4 h-4 transition-transform ${showQboMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showQboMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-lg shadow-lg border border-slate-700 py-1 z-50">
+                  <button
+                    onClick={() => void handleDisconnectQbo()}
+                    disabled={disconnecting}
+                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300 transition disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {disconnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
+                        Disconnecting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Disconnect QuickBooks
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <button
               onClick={handleConnectQbo}
