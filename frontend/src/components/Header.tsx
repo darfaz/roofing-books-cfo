@@ -71,7 +71,7 @@ export function Header({ userEmail }: HeaderProps) {
     if (!tenantId) return
     setDisconnecting(true)
     try {
-      const response = await fetch(`/api/auth/qbo/disconnect?tenant_id=${tenantId}`, {
+      const response = await fetch(`/auth/qbo/disconnect?tenant_id=${tenantId}`, {
         method: 'POST',
       })
       if (response.ok) {
