@@ -115,7 +115,7 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
         throw new Error(result.detail || result.error?.message || 'Failed to fetch analysis')
       }
 
-      setAnalysis(result)
+      setAnalysis(result.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profit leak report')
     } finally {

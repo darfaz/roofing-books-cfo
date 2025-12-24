@@ -135,18 +135,21 @@ export function FinanceDashboard({ accessToken }: FinanceDashboardProps) {
       ])
 
       if (alertRes.ok) {
-        setCashAlert(await alertRes.json())
+        const alertData = await alertRes.json()
+        setCashAlert(alertData.data)
       }
       if (scenariosRes.ok) {
-        setAllScenarios(await scenariosRes.json())
+        const scenariosData = await scenariosRes.json()
+        setAllScenarios(scenariosData.data)
       }
       if (apRes.ok) {
-        setAPAging(await apRes.json())
+        const apData = await apRes.json()
+        setAPAging(apData.data)
       }
       if (budgetRes.ok) {
-        const data = await budgetRes.json()
-        if (data.status !== 'no_budget') {
-          setBudgetVariance(data)
+        const budgetData = await budgetRes.json()
+        if (budgetData.data && budgetData.data.status !== 'no_budget') {
+          setBudgetVariance(budgetData.data)
         }
       }
     } catch (err) {
