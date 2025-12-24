@@ -88,6 +88,7 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
   const [analysis, setAnalysis] = useState<OverheadAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tenantId, setTenantId] = useState<string | null>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['summary', 'overhead']))
 
   const fetchAnalysis = useCallback(async () => {
@@ -96,14 +97,15 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
       setError(null)
 
       const { data: { user } } = await supabase.auth.getUser()
-      const tenantId = user?.user_metadata?.tenant_id
+      const tid = user?.user_metadata?.tenant_id
+      setTenantId(tid)
 
-      if (!tenantId) {
+      if (!tid) {
         setError('No tenant found. Please log in again.')
         return
       }
 
-      const response = await fetch(`/api/qbo/overhead/summary?tenant_id=${tenantId}`, {
+      const response = await fetch(`/api/qbo/overhead/summary?tenant_id=${tid}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -173,6 +175,14 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
   }
 
   if (error) {
+    const needsReconnect = error.toLowerCase().includes('reconnect') || error.toLowerCase().includes('expired')
+
+    const handleReconnectQbo = () => {
+      if (!tenantId) return
+      const returnUrl = `${window.location.origin}${window.location.pathname}`
+      window.location.href = `/auth/qbo/connect?tenant_id=${tenantId}&return_url=${encodeURIComponent(returnUrl)}`
+    }
+
     return (
       <GlassCard variant="danger">
         <div className="flex items-center gap-3">
@@ -182,14 +192,30 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
             <div className="text-sm text-red-400/80">{error}</div>
           </div>
         </div>
-        <motion.button
-          onClick={() => void fetchAnalysis()}
-          className="mt-4 bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm transition"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          Try Again
-        </motion.button>
+        <div className="mt-4 flex gap-3">
+          {needsReconnect && tenantId ? (
+            <motion.button
+              onClick={handleReconnectQbo}
+              className="bg-[#2CA01C] hover:bg-[#3AB82A] text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+              </svg>
+              Reconnect QuickBooks
+            </motion.button>
+          ) : (
+            <motion.button
+              onClick={() => void fetchAnalysis()}
+              className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm transition"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              Try Again
+            </motion.button>
+          )}
+        </div>
       </GlassCard>
     )
   }

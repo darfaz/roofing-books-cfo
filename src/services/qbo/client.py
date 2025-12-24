@@ -90,8 +90,9 @@ class QBOClient:
                             .eq("is_active", True)\
                             .execute()
                         integration = result.data[0]
-                    except Exception:
-                        pass  # Continue with existing token
+                    except Exception as refresh_err:
+                        # Don't silently ignore - re-raise so user knows to reconnect
+                        raise refresh_err
         
         self._access_token = integration["access_token"]
         
@@ -123,6 +124,19 @@ class QBOClient:
             )
         
         if response.status_code != 200:
+            error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+            error_type = error_data.get("error", "unknown")
+
+            # If refresh token is invalid, mark integration as inactive so UI shows "Connect" button
+            if error_type == "invalid_grant":
+                print(f"QBO refresh token invalid for tenant {self.tenant_id}, marking integration as inactive")
+                self.supabase.table("tenant_integrations")\
+                    .update({"is_active": False})\
+                    .eq("tenant_id", self.tenant_id)\
+                    .eq("provider", "quickbooks")\
+                    .execute()
+                raise ValueError("QBO connection expired. Please reconnect QuickBooks.")
+
             raise ValueError(f"Token refresh failed: {response.text}")
         
         tokens = response.json()
