@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
+import { SupportModal } from './SupportModal'
 
 interface HeaderProps {
   userEmail?: string
@@ -12,6 +13,7 @@ export function Header({ userEmail }: HeaderProps) {
   const [connecting, setConnecting] = useState(false)
   const [showQboMenu, setShowQboMenu] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [showSupportModal, setShowSupportModal] = useState(false)
   const qboMenuRef = useRef<HTMLDivElement>(null)
 
   // Close QBO menu when clicking outside
@@ -174,12 +176,12 @@ export function Header({ userEmail }: HeaderProps) {
               {userEmail}
             </span>
           )}
-          <a
-            href="mailto:support@crewcfo.com"
+          <button
+            onClick={() => setShowSupportModal(true)}
             className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
           >
             Support
-          </a>
+          </button>
           <button
             onClick={() => void handleLogout()}
             className="text-sm text-slate-400 hover:text-white transition bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg"
@@ -188,6 +190,13 @@ export function Header({ userEmail }: HeaderProps) {
           </button>
         </div>
       </div>
+
+      {/* Support Modal */}
+      <SupportModal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+        userEmail={userEmail}
+      />
     </motion.header>
   )
 }

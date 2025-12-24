@@ -2851,6 +2851,67 @@ async def list_shock_reports(
 
 
 # ============================================================
+# CONTACT / SUPPORT
+# ============================================================
+
+@app.post("/api/contact")
+async def send_contact_message(
+    subject: str = Body(...),
+    message: str = Body(...),
+    from_email: str = Body(...)
+):
+    """Send a support contact message via Resend"""
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    from_address = os.getenv("FROM_EMAIL", "noreply@crewcfo.com")
+
+    if not resend_api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Email service not configured"
+        )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": from_address,
+                    "to": ["support@crewcfo.com"],
+                    "subject": f"[CrewCFO Support] {subject}",
+                    "html": f"""
+                        <h2>New Support Request</h2>
+                        <p><strong>From:</strong> {from_email}</p>
+                        <p><strong>Subject:</strong> {subject}</p>
+                        <hr>
+                        <p>{message.replace(chr(10), '<br>')}</p>
+                    """,
+                    "reply_to": from_email
+                }
+            )
+
+            if response.status_code not in [200, 201]:
+                error_detail = response.json() if response.content else {}
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to send email: {error_detail.get('message', 'Unknown error')}"
+                )
+
+            return {
+                "success": True,
+                "message": "Your message has been sent. We'll get back to you soon!"
+            }
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to connect to email service: {str(e)}"
+        )
+
+
+# ============================================================
 # RUN SERVER
 # ============================================================
 
