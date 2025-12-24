@@ -52,19 +52,7 @@ class CashFlowForecastService:
         Returns:
             Total cash balance across all bank accounts
         """
-        # Try to get from tenant settings or latest sync
-        tenant_result = self.supabase.table("tenants")\
-            .select("metadata")\
-            .eq("id", self.tenant_id)\
-            .limit(1)\
-            .execute()
-
-        if tenant_result.data:
-            metadata = tenant_result.data[0].get("metadata", {}) or {}
-            if "cash_balance" in metadata:
-                return float(metadata["cash_balance"])
-
-        # Fallback: Calculate from deposits minus withdrawals in last 30 days
+        # Calculate from deposits minus withdrawals in last 30 days
         # This is a simplified approach - ideally would integrate with bank feeds
         today = date.today()
         start_date = (today - timedelta(days=30)).isoformat()
