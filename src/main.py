@@ -1220,6 +1220,160 @@ async def get_overhead_summary(tenant_id: str):
         raise HTTPException(500, f"Failed to get overhead analysis: {str(e)}")
 
 
+@app.get("/api/qbo/overhead/demo")
+async def get_overhead_demo():
+    """
+    Demo endpoint returning simulated data for a $2M roofing contractor
+    with all 5 profit leaks. Use this to test the Profit Leaks UI.
+
+    The 5 Profit Leaks simulated:
+    1. LOW GROSS MARGIN (18%) - underpricing jobs
+    2. HIGH MATERIALS COST (42% of revenue) - material waste/theft
+    3. LABOR INEFFICIENCY (28% of revenue) - crew productivity issues
+    4. OVERHEAD CREEP (24% of revenue) - excessive fixed costs
+    5. UNTRACKED EXPENSES ($48k) - money leaking through mixed expenses
+    """
+    from datetime import datetime, timedelta
+
+    # Calculate date range (last 12 months)
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+
+    # $2M annual roofing contractor with problems
+    annual_revenue = 2_000_000
+    monthly_revenue = annual_revenue / 12  # $166,667
+
+    # LEAK 1: Low gross margin (18% instead of healthy 35%+)
+    # This means job costs are 82% of revenue
+    gross_margin_pct = 0.18
+    job_costs_pct = 1 - gross_margin_pct  # 82%
+    annual_job_costs = annual_revenue * job_costs_pct  # $1,640,000
+    monthly_job_costs = annual_job_costs / 12  # $136,667
+
+    # LEAK 2: High materials (42% of revenue, should be 30-35%)
+    materials = annual_revenue * 0.42  # $840,000
+
+    # LEAK 3: Labor inefficiency (28% of revenue, should be 20-22%)
+    direct_labor = annual_revenue * 0.28  # $560,000
+
+    # Other job costs (12% of revenue)
+    subcontractors = annual_revenue * 0.06  # $120,000
+    equipment = annual_revenue * 0.03  # $60,000
+    disposal = annual_revenue * 0.02  # $40,000
+    permits = annual_revenue * 0.01  # $20,000
+
+    # LEAK 4: High overhead (24% of revenue, should be 15-18%)
+    annual_overhead = annual_revenue * 0.24  # $480,000
+    monthly_overhead = annual_overhead / 12  # $40,000
+
+    # Overhead breakdown (typical problem areas)
+    overhead_by_category = {
+        "payroll": 168_000,        # Admin salaries - high at $14k/month
+        "insurance": 84_000,       # GL + WC + Auto - $7k/month
+        "rent": 48_000,            # Yard/office rent - $4k/month
+        "marketing": 60_000,       # Advertising spend - $5k/month (maybe not generating ROI)
+        "utilities": 18_000,       # Electric/gas/water - $1.5k/month
+        "professional_fees": 24_000,  # Accountant/lawyer - $2k/month
+        "office": 30_000,          # Supplies/software - $2.5k/month
+        "depreciation": 36_000,    # Vehicle/equipment depreciation - $3k/month
+        "other_overhead": 12_000,  # Misc - $1k/month
+    }
+
+    # Job costs breakdown
+    job_costs_by_category = {
+        "materials": materials,        # $840,000 - LEAK!
+        "direct_labor": direct_labor,  # $560,000 - LEAK!
+        "subcontractors": subcontractors,
+        "equipment": equipment,
+        "disposal": disposal,
+        "permits": permits,
+    }
+
+    # Monthly overhead trend (simulate 12 months with some variation)
+    monthly_trend = {}
+    base_overhead = monthly_overhead
+    for i in range(12):
+        month_date = start_date + timedelta(days=30*i)
+        month_key = month_date.strftime("%Y-%m")
+        variation = 1 + (0.1 * ((i % 3) - 1))  # +/- 10% variation
+        monthly_trend[month_key] = {
+            cat: round(val / 12 * variation, 2)
+            for cat, val in overhead_by_category.items()
+        }
+
+    # LEAK 5: Mixed expenses (untracked costs)
+    mixed_expenses_total = 48_000  # $4k/month in unclassified expenses
+    mixed_expenses_count = 156  # ~13 transactions per month unclassified
+
+    # Calculate break-even at current margin
+    break_even_monthly = monthly_overhead / gross_margin_pct  # $40k / 0.18 = $222,222
+    break_even_annual = break_even_monthly * 12
+
+    # Break-even scenarios
+    scenarios = {
+        "20%": {"margin": 0.20, "monthly_break_even": monthly_overhead / 0.20, "annual_break_even": annual_overhead / 0.20, "is_current": False},
+        "25%": {"margin": 0.25, "monthly_break_even": monthly_overhead / 0.25, "annual_break_even": annual_overhead / 0.25, "is_current": False},
+        "30%": {"margin": 0.30, "monthly_break_even": monthly_overhead / 0.30, "annual_break_even": annual_overhead / 0.30, "is_current": False},
+        "35%": {"margin": 0.35, "monthly_break_even": monthly_overhead / 0.35, "annual_break_even": annual_overhead / 0.35, "is_current": False},
+        "40%": {"margin": 0.40, "monthly_break_even": monthly_overhead / 0.40, "annual_break_even": annual_overhead / 0.40, "is_current": False},
+    }
+
+    # Return the simulated analysis
+    demo_analysis = {
+        "period": {
+            "start": start_date.strftime("%Y-%m-%d"),
+            "end": end_date.strftime("%Y-%m-%d"),
+            "months": 12
+        },
+        "overhead": {
+            "total": annual_overhead,
+            "monthly_average": monthly_overhead,
+            "by_category": overhead_by_category,
+            "monthly_trend": monthly_trend,
+            "transaction_count": 847  # Realistic transaction count
+        },
+        "job_costs": {
+            "total": annual_job_costs,
+            "monthly_average": monthly_job_costs,
+            "by_category": job_costs_by_category,
+            "transaction_count": 1423  # Realistic transaction count
+        },
+        "revenue": {
+            "total": annual_revenue,
+            "monthly_average": monthly_revenue
+        },
+        "profitability": {
+            "gross_margin": gross_margin_pct,
+            "gross_margin_pct": f"{gross_margin_pct * 100:.1f}%",
+            "gross_profit_monthly": monthly_revenue * gross_margin_pct
+        },
+        "break_even": {
+            "current_margin": {
+                "margin": gross_margin_pct,
+                "monthly": break_even_monthly,
+                "annual": break_even_annual
+            },
+            "scenarios": scenarios
+        },
+        "mixed_expenses": {
+            "total": mixed_expenses_total,
+            "count": mixed_expenses_count,
+            "note": "These expenses couldn't be automatically classified - review needed"
+        },
+        "confidence": {
+            "overhead_avg": 0.72,  # Lower confidence due to mixed expenses
+            "job_cost_avg": 0.68   # Lower confidence
+        },
+        "_demo_note": "SIMULATED DATA: $2M roofing contractor with 5 profit leaks"
+    }
+
+    return {
+        "success": True,
+        "data": demo_analysis,
+        "demo": True
+    }
+
+
 @app.get("/api/qbo/expenses/classified")
 async def get_expenses_classified(tenant_id: str):
     """
@@ -2909,6 +3063,668 @@ async def send_contact_message(
             status_code=500,
             detail=f"Failed to connect to email service: {str(e)}"
         )
+
+
+# ============================================================
+# DEMO MODE ENDPOINTS
+# ============================================================
+# These endpoints provide realistic demo data for showcasing
+# all dashboard features without requiring QuickBooks connection.
+# Demo Company: Apex Roofing Solutions ($3.5M revenue)
+# ============================================================
+
+DEMO_TENANT_ID = "demo-0000-0000-0000-000000000001"
+
+
+@app.get("/api/demo/dashboard")
+async def get_demo_dashboard():
+    """
+    Demo dashboard data for Apex Roofing Solutions.
+    Shows overview metrics, trends, and KPIs.
+    """
+    from datetime import datetime, timedelta
+
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+
+    # $3.5M annual revenue with seasonal patterns
+    monthly_data = []
+    base_revenue = 291667
+    seasonal_pattern = [0.70, 0.75, 0.95, 1.15, 1.25, 1.20, 1.10, 1.05, 1.10, 1.05, 0.85, 0.85]
+
+    for i in range(12):
+        month_date = start_date + timedelta(days=30 * i)
+        revenue = base_revenue * seasonal_pattern[i]
+        expenses = revenue * 0.78  # 22% gross margin (problematic)
+        profit = revenue - expenses
+
+        monthly_data.append({
+            "month": month_date.strftime("%Y-%m"),
+            "revenue": round(revenue),
+            "expenses": round(expenses),
+            "profit": round(profit),
+            "gross_margin": 0.22,
+            "job_count": int(revenue / 18000)  # ~$18K avg job
+        })
+
+    return {
+        "success": True,
+        "data": {
+            "company": {
+                "name": "Apex Roofing Solutions",
+                "industry": "Roofing Contractor",
+                "location": "Dallas, TX",
+                "employees": 12,
+                "years_in_business": 8
+            },
+            "summary": {
+                "ttm_revenue": 3500000,
+                "ttm_expenses": 2730000,
+                "ttm_profit": 245000,
+                "gross_margin": 0.22,
+                "net_margin": 0.07,
+                "job_count": 195,
+                "avg_job_size": 17949
+            },
+            "kpis": {
+                "days_receivable": 47,
+                "days_payable": 28,
+                "current_ratio": 1.3,
+                "quick_ratio": 0.9
+            },
+            "monthly_data": monthly_data,
+            "alerts": [
+                {"type": "warning", "message": "Gross margin 22% below industry average (28-35%)"},
+                {"type": "warning", "message": "AR days at 47 - target is <35 days"},
+                {"type": "info", "message": "Revenue up 8% vs prior year"}
+            ]
+        },
+        "demo": True
+    }
+
+
+@app.get("/api/demo/finance")
+async def get_demo_finance():
+    """
+    Demo finance dashboard with P&L, cash flow, AR/AP aging.
+    """
+    from datetime import datetime, timedelta
+
+    return {
+        "success": True,
+        "data": {
+            "income_statement": {
+                "period": "TTM",
+                "revenue": {
+                    "roofing_services": 2450000,
+                    "commercial_roofing": 875000,
+                    "repairs_maintenance": 175000,
+                    "total": 3500000
+                },
+                "cost_of_goods_sold": {
+                    "materials": 1225000,  # 35% - high
+                    "direct_labor": 630000,  # 18%
+                    "subcontractors": 280000,  # 8%
+                    "equipment": 70000,  # 2%
+                    "disposal": 70000,  # 2%
+                    "total": 2275000  # 65% COGS
+                },
+                "gross_profit": 1225000,
+                "gross_margin": 0.35,
+                "operating_expenses": {
+                    "payroll_admin": 225000,  # Includes owner + spouse overpay
+                    "insurance": 122500,
+                    "rent": 70000,
+                    "marketing": 70000,
+                    "vehicles": 87500,  # Includes personal BMW
+                    "professional_fees": 35000,
+                    "office_software": 52500,
+                    "utilities": 28000,
+                    "entertainment": 12000,  # Country club
+                    "depreciation": 42000,
+                    "other": 35000,
+                    "total": 779500
+                },
+                "operating_income": 445500,
+                "other_expenses": 200500,
+                "net_income": 245000,
+                "net_margin": 0.07
+            },
+            "cash_flow": {
+                "starting_cash": 125000,
+                "operating_cash_flow": 285000,
+                "investing_cash_flow": -45000,
+                "financing_cash_flow": -180000,
+                "ending_cash": 185000,
+                "runway_weeks": 14
+            },
+            "ar_aging": {
+                "current": 185000,
+                "1_30_days": 95000,
+                "31_60_days": 45000,
+                "61_90_days": 28000,
+                "over_90_days": 12000,
+                "total": 365000,
+                "days_outstanding": 47
+            },
+            "ap_aging": {
+                "current": 78000,
+                "1_30_days": 42000,
+                "31_60_days": 15000,
+                "over_60_days": 5000,
+                "total": 140000,
+                "days_outstanding": 28
+            },
+            "job_profitability": [
+                {"job": "Smith Residence - Full Replacement", "revenue": 24500, "cost": 17150, "margin": 0.30},
+                {"job": "Riverside PM - Bldg A", "revenue": 67000, "cost": 46900, "margin": 0.30},
+                {"job": "Johnson Residence - Repair", "revenue": 4200, "cost": 3570, "margin": 0.15},
+                {"job": "Summit Builders - Phase 2", "revenue": 145000, "cost": 116000, "margin": 0.20},
+                {"job": "Garcia Residence - Storm", "revenue": 18500, "cost": 12950, "margin": 0.30}
+            ]
+        },
+        "demo": True
+    }
+
+
+@app.get("/api/demo/shock-report")
+async def get_demo_shock_report():
+    """
+    Demo valuation shock report showing expected vs actual valuation gap.
+    This is the core conversion tool.
+    """
+    return {
+        "success": True,
+        "data": {
+            "company": "Apex Roofing Solutions",
+            "generated_at": datetime.now().isoformat(),
+
+            # What owner expects
+            "owner_view": {
+                "revenue": 3500000,
+                "ebitda": 350000,
+                "expected_multiple": 10.0,
+                "expected_valuation": 3500000,
+                "addbacks_claimed": {
+                    "owner_salary": 180000,
+                    "spouse_salary": 45000,
+                    "personal_vehicle": 18000,
+                    "entertainment": 12000,
+                    "one_time_legal": 25000,
+                    "total": 280000
+                }
+            },
+
+            # What buyer sees
+            "buyer_view": {
+                "defensible_ebitda": 245000,
+                "defensible_sde": 395000,
+                "multiple_low": 3.0,
+                "multiple_high": 4.0,
+                "valuation_low": 735000,
+                "valuation_high": 980000,
+                "accepted_addbacks": {
+                    "owner_salary_portion": 60000,
+                    "spouse_salary_portion": 15000,
+                    "personal_vehicle": 0,
+                    "entertainment": 0,
+                    "one_time_legal": 25000,
+                    "total": 100000
+                },
+                "rejected_addbacks": {
+                    "owner_salary_excess": 60000,
+                    "spouse_salary_excess": 30000,
+                    "personal_vehicle": 18000,
+                    "entertainment": 12000,
+                    "total": 120000
+                }
+            },
+
+            # The shock
+            "gap": {
+                "ebitda_haircut": 105000,
+                "multiple_penalty": 6.5,
+                "value_gap": 2520000,
+                "value_gap_percentage": 72
+            },
+
+            # Multiple penalties explained
+            "multiple_penalties": [
+                {
+                    "driver": "management_independence",
+                    "score": 25,
+                    "penalty": -1.5,
+                    "reason": "Owner IS the business",
+                    "buyer_concern": "Key person risk - owner handles all sales and estimates",
+                    "fix": "Hire operations manager; document all processes"
+                },
+                {
+                    "driver": "recurring_revenue",
+                    "score": 15,
+                    "penalty": -1.0,
+                    "reason": "Zero recurring revenue",
+                    "buyer_concern": "100% project-based, unpredictable cash flow",
+                    "fix": "Launch maintenance contract program"
+                },
+                {
+                    "driver": "financial_records",
+                    "score": 55,
+                    "penalty": -0.5,
+                    "reason": "Messy books",
+                    "buyer_concern": "Personal expenses mixed, delayed monthly close",
+                    "fix": "Clean up chart of accounts; 5-day close process"
+                },
+                {
+                    "driver": "customer_diversity",
+                    "score": 45,
+                    "penalty": -0.5,
+                    "reason": "Customer concentration",
+                    "buyer_concern": "Top 3 customers = 42% of revenue",
+                    "fix": "Diversify customer base; no customer >15%"
+                }
+            ],
+
+            # Value unlocks
+            "value_unlocks": [
+                {"priority": 1, "title": "Hire Operations Manager", "ev_impact": 350000, "effort": "high", "timeline": "6-12 months"},
+                {"priority": 2, "title": "Launch Maintenance Contracts", "ev_impact": 280000, "effort": "medium", "timeline": "3-6 months"},
+                {"priority": 3, "title": "Clean Up Personal Expenses", "ev_impact": 175000, "effort": "low", "timeline": "1-3 months"},
+                {"priority": 4, "title": "Diversify Customer Base", "ev_impact": 150000, "effort": "high", "timeline": "12+ months"},
+                {"priority": 5, "title": "Document All SOPs", "ev_impact": 125000, "effort": "medium", "timeline": "3-6 months"}
+            ],
+
+            "total_recoverable_value": 1080000,
+            "tier": "below_avg",
+            "confidence_score": 78
+        },
+        "demo": True
+    }
+
+
+@app.get("/api/demo/simulator")
+async def get_demo_simulator():
+    """
+    Demo scenario simulator showing what-if analysis.
+    """
+    return {
+        "success": True,
+        "data": {
+            "current_state": {
+                "revenue": 3500000,
+                "ebitda": 245000,
+                "multiple": 3.5,
+                "valuation": 857500,
+                "gross_margin": 0.22,
+                "recurring_revenue_pct": 0,
+                "owner_dependency_score": 25
+            },
+            "scenarios": [
+                {
+                    "name": "Price Increase 5%",
+                    "changes": {"revenue": 3675000, "ebitda": 332500, "gross_margin": 0.26},
+                    "impact": {"ebitda_delta": 87500, "valuation_delta": 306250},
+                    "effort": "low",
+                    "timeline": "Immediate"
+                },
+                {
+                    "name": "Launch Maintenance Program",
+                    "changes": {"recurring_revenue_pct": 0.08, "revenue": 3570000},
+                    "impact": {"multiple_delta": 0.75, "valuation_delta": 280000},
+                    "effort": "medium",
+                    "timeline": "6-12 months"
+                },
+                {
+                    "name": "Hire Ops Manager",
+                    "changes": {"owner_dependency_score": 65, "ebitda": 215000},
+                    "impact": {"multiple_delta": 1.0, "valuation_delta": 285000},
+                    "effort": "high",
+                    "timeline": "6-12 months"
+                },
+                {
+                    "name": "Clean Up Expenses",
+                    "changes": {"ebitda": 305000},
+                    "impact": {"ebitda_delta": 60000, "valuation_delta": 210000},
+                    "effort": "low",
+                    "timeline": "1-3 months"
+                },
+                {
+                    "name": "Full Value Optimization",
+                    "changes": {
+                        "revenue": 3850000,
+                        "ebitda": 462000,
+                        "gross_margin": 0.30,
+                        "recurring_revenue_pct": 0.12,
+                        "owner_dependency_score": 70
+                    },
+                    "impact": {
+                        "multiple_delta": 2.5,
+                        "valuation_delta": 1925000,
+                        "new_valuation": 2772000
+                    },
+                    "effort": "high",
+                    "timeline": "18-24 months"
+                }
+            ],
+            "industry_benchmarks": {
+                "gross_margin": {"industry_avg": 0.28, "top_quartile": 0.35},
+                "net_margin": {"industry_avg": 0.10, "top_quartile": 0.15},
+                "recurring_revenue": {"industry_avg": 0.05, "top_quartile": 0.15},
+                "ebitda_multiple": {"industry_avg": 4.5, "top_quartile": 6.5}
+            }
+        },
+        "demo": True
+    }
+
+
+@app.get("/api/demo/exit-readiness")
+async def get_demo_exit_readiness():
+    """
+    Demo exit readiness checklist and CIM preparation status.
+    """
+    return {
+        "success": True,
+        "data": {
+            "readiness_score": 45,
+            "status": "In Progress",
+            "checklist": [
+                {"key": "financial_statements", "label": "Financial Statements", "status": "complete", "docs": 3},
+                {"key": "tax_returns", "label": "Tax Returns", "status": "complete", "docs": 3},
+                {"key": "ar_ap_aging", "label": "AR/AP Aging Reports", "status": "complete", "docs": 2},
+                {"key": "asset_list", "label": "Asset List", "status": "partial", "docs": 1},
+                {"key": "org_chart", "label": "Organization Chart", "status": "missing", "docs": 0},
+                {"key": "kpi_dashboard", "label": "KPI Dashboard", "status": "missing", "docs": 0},
+                {"key": "safety_insurance", "label": "Safety & Insurance", "status": "partial", "docs": 2}
+            ],
+            "deal_room_items": {
+                "uploaded": 11,
+                "total_required": 20,
+                "missing_critical": ["org_chart", "kpi_dashboard", "customer_contracts"]
+            },
+            "buyer_attractiveness": {
+                "score": 45,
+                "strengths": [
+                    "Strong Texas market presence",
+                    "8 years operating history",
+                    "Clean safety record"
+                ],
+                "weaknesses": [
+                    "High owner dependency",
+                    "No recurring revenue",
+                    "Customer concentration risk"
+                ],
+                "pe_interest_level": "Low-Medium",
+                "likely_buyer_type": "Strategic acquirer or local competitor"
+            },
+            "timeline_to_ready": {
+                "current_state": "Not ready for market",
+                "estimated_prep_time": "12-18 months",
+                "key_milestones": [
+                    {"milestone": "Clean financial records", "target": "3 months"},
+                    {"milestone": "Hire operations manager", "target": "6 months"},
+                    {"milestone": "Launch maintenance program", "target": "9 months"},
+                    {"milestone": "Complete CIM", "target": "12 months"}
+                ]
+            }
+        },
+        "demo": True
+    }
+
+
+@app.get("/api/demo/roadmap")
+async def get_demo_roadmap():
+    """
+    Demo strategic roadmap with prioritized action items.
+    """
+    return {
+        "success": True,
+        "data": {
+            "total_ev_opportunity": 1080000,
+            "items_count": 9,
+            "items_by_priority": {
+                "critical": 2,
+                "high": 4,
+                "medium": 3
+            },
+            "items": [
+                {
+                    "id": "1",
+                    "title": "Hire Operations Manager",
+                    "description": "Recruit and onboard an operations manager to handle day-to-day decisions",
+                    "driver": "management_independence",
+                    "category": "strategic",
+                    "priority": "critical",
+                    "status": "pending",
+                    "ev_impact": 350000,
+                    "effort": "high",
+                    "timeline": "6-12 months",
+                    "due_date": "2025-06-30"
+                },
+                {
+                    "id": "2",
+                    "title": "Launch Maintenance Contract Program",
+                    "description": "Create annual roof maintenance contracts ($350-500/year residential)",
+                    "driver": "recurring_revenue",
+                    "category": "strategic",
+                    "priority": "critical",
+                    "status": "pending",
+                    "ev_impact": 280000,
+                    "effort": "medium",
+                    "timeline": "3-6 months",
+                    "due_date": "2025-04-30"
+                },
+                {
+                    "id": "3",
+                    "title": "Clean Up Personal Expenses",
+                    "description": "Remove all personal expenses from P&L and transfer to owner distributions",
+                    "driver": "financial_records",
+                    "category": "monthly_close",
+                    "priority": "high",
+                    "status": "in_progress",
+                    "ev_impact": 175000,
+                    "effort": "low",
+                    "timeline": "1-3 months",
+                    "due_date": "2025-02-28"
+                },
+                {
+                    "id": "4",
+                    "title": "Document All SOPs",
+                    "description": "Create written Standard Operating Procedures for all key processes",
+                    "driver": "management_independence",
+                    "category": "strategic",
+                    "priority": "high",
+                    "status": "in_progress",
+                    "ev_impact": 125000,
+                    "effort": "medium",
+                    "timeline": "3-6 months",
+                    "due_date": "2025-03-31"
+                },
+                {
+                    "id": "5",
+                    "title": "Reduce Builder Concentration",
+                    "description": "Target: No single customer >15% of revenue",
+                    "driver": "customer_diversity",
+                    "category": "quarterly_review",
+                    "priority": "high",
+                    "status": "in_progress",
+                    "ev_impact": 150000,
+                    "effort": "high",
+                    "timeline": "12+ months",
+                    "due_date": "2025-12-31"
+                },
+                {
+                    "id": "6",
+                    "title": "Implement 5-Day Close Process",
+                    "description": "Close books within 5 business days of month-end",
+                    "driver": "financial_records",
+                    "category": "monthly_close",
+                    "priority": "high",
+                    "status": "pending",
+                    "ev_impact": 50000,
+                    "effort": "medium",
+                    "timeline": "1-3 months",
+                    "due_date": "2025-02-28"
+                },
+                {
+                    "id": "7",
+                    "title": "Implement Job Costing System",
+                    "description": "Track actual vs. estimated costs per job with QuickBooks integration",
+                    "driver": "operational_systems",
+                    "category": "strategic",
+                    "priority": "medium",
+                    "status": "pending",
+                    "ev_impact": 75000,
+                    "effort": "medium",
+                    "timeline": "3-6 months",
+                    "due_date": "2025-04-30"
+                },
+                {
+                    "id": "8",
+                    "title": "Implement Extended Warranty Program",
+                    "description": "Offer 10-year extended labor warranty for premium pricing",
+                    "driver": "recurring_revenue",
+                    "category": "strategic",
+                    "priority": "medium",
+                    "status": "pending",
+                    "ev_impact": 85000,
+                    "effort": "low",
+                    "timeline": "1-3 months",
+                    "due_date": "2025-03-31"
+                },
+                {
+                    "id": "9",
+                    "title": "Digitize Safety Checklists",
+                    "description": "Replace paper safety checklists with digital forms",
+                    "driver": "operational_systems",
+                    "category": "compliance",
+                    "priority": "medium",
+                    "status": "pending",
+                    "ev_impact": 25000,
+                    "effort": "low",
+                    "timeline": "1 month",
+                    "due_date": "2025-02-15"
+                }
+            ],
+            "progress": {
+                "completed": 0,
+                "in_progress": 3,
+                "pending": 6,
+                "ev_realized": 0,
+                "ev_in_progress": 450000
+            }
+        },
+        "demo": True
+    }
+
+
+@app.get("/api/demo/profit-leaks")
+async def get_demo_profit_leaks():
+    """
+    Demo profit leaks with specific fix recommendations and $ impact.
+    Based on industry research: avg margin 25-35%, net 6-12%.
+    Demo company has 22% gross margin (problematic) and 7% net margin.
+    """
+    return {
+        "success": True,
+        "data": {
+            "company": "Apex Roofing Solutions",
+            "period": "TTM",
+            "summary": {
+                "total_leaks_identified": 5,
+                "total_annual_impact": 165000,
+                "current_gross_margin": 0.22,
+                "target_gross_margin": 0.30,
+                "current_net_margin": 0.07,
+                "target_net_margin": 0.12
+            },
+            "leaks": [
+                {
+                    "id": 1,
+                    "title": "Owner Compensation Above Market",
+                    "category": "Personal Expenses",
+                    "annual_impact": 60000,
+                    "description": "Owner salary of $180K exceeds market rate for GM role ($120K)",
+                    "evidence": [
+                        "BLS data shows GM median salary $110-130K in Texas",
+                        "Excess $60K reduces defensible EBITDA"
+                    ],
+                    "fix": "Document market-rate salary; treat excess as owner distribution",
+                    "effort": "low",
+                    "priority": "high"
+                },
+                {
+                    "id": 2,
+                    "title": "Related Party Salary",
+                    "category": "Personal Expenses",
+                    "annual_impact": 30000,
+                    "description": "Spouse on payroll at $45K with unclear job duties",
+                    "evidence": [
+                        "No job description on file",
+                        "Part-time admin work valued at $15K market rate"
+                    ],
+                    "fix": "Document job duties or adjust to market rate; $30K excess to distribution",
+                    "effort": "low",
+                    "priority": "high"
+                },
+                {
+                    "id": 3,
+                    "title": "Personal Vehicle Expense",
+                    "category": "Personal Expenses",
+                    "annual_impact": 18000,
+                    "description": "Personal BMW X5 fully expensed through company",
+                    "evidence": [
+                        "No mileage log for business use",
+                        "Vehicle used primarily for personal transportation"
+                    ],
+                    "fix": "Remove from business expenses; pay personally or implement mileage log",
+                    "effort": "low",
+                    "priority": "medium"
+                },
+                {
+                    "id": 4,
+                    "title": "Entertainment/Country Club",
+                    "category": "Discretionary",
+                    "annual_impact": 12000,
+                    "description": "Country club membership with no documented business purpose",
+                    "evidence": [
+                        "No client entertainment log",
+                        "Appears to be personal lifestyle expense"
+                    ],
+                    "fix": "Remove from business expenses",
+                    "effort": "low",
+                    "priority": "medium"
+                },
+                {
+                    "id": 5,
+                    "title": "Underpricing Jobs",
+                    "category": "Pricing",
+                    "annual_impact": 45000,
+                    "description": "Gross margin 22% vs industry target 28-30%",
+                    "evidence": [
+                        "Material costs 35% of revenue vs 30% benchmark",
+                        "Labor at 18% vs 15% benchmark",
+                        "5% price increase would add $175K revenue"
+                    ],
+                    "fix": "Implement 5% price increase; review material supplier contracts",
+                    "effort": "medium",
+                    "priority": "high"
+                }
+            ],
+            "industry_benchmarks": {
+                "gross_margin": {"you": 0.22, "avg": 0.28, "top": 0.35},
+                "net_margin": {"you": 0.07, "avg": 0.10, "top": 0.15},
+                "materials_pct": {"you": 0.35, "avg": 0.30, "target": 0.28},
+                "labor_pct": {"you": 0.18, "avg": 0.15, "target": 0.14},
+                "overhead_pct": {"you": 0.25, "avg": 0.22, "target": 0.20}
+            },
+            "fix_priority_order": [
+                "1. Clean personal expenses (Quick win: $120K impact, low effort)",
+                "2. Price increase 5% (Medium effort: $175K revenue impact)",
+                "3. Review material supplier contracts (Medium effort: reduce COGS)",
+                "4. Implement labor tracking (High effort: improve crew efficiency)"
+            ]
+        },
+        "demo": True
+    }
 
 
 # ============================================================

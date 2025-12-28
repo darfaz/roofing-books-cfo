@@ -556,21 +556,10 @@ export function Login() {
             {authStep === 'mfa_enroll' && renderMfaEnroll()}
           </div>
 
-          {/* Demo credentials hint - only show on login */}
-          {authStep === 'login' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              className="mt-6 text-center"
-            >
-              <p className="text-xs text-slate-600">
-                Demo: demo@crewcfo.com / demo1234
-              </p>
-            </motion.div>
-          )}
         </motion.div>
       </div>
     </div>
   )
 }
+
+

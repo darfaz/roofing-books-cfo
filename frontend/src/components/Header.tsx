@@ -2,12 +2,14 @@ import { useEffect, useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { SupportModal } from './SupportModal'
+import { useDemoMode } from '../context/DemoContext'
 
 interface HeaderProps {
   userEmail?: string
+  onExitDemo?: () => void
 }
 
-export function Header({ userEmail }: HeaderProps) {
+export function Header({ userEmail, onExitDemo }: HeaderProps) {
   const [qboConnected, setQboConnected] = useState<boolean | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
@@ -15,6 +17,7 @@ export function Header({ userEmail }: HeaderProps) {
   const [disconnecting, setDisconnecting] = useState(false)
   const [showSupportModal, setShowSupportModal] = useState(false)
   const qboMenuRef = useRef<HTMLDivElement>(null)
+  const { isDemoMode, demoCompanyName } = useDemoMode()
 
   // Close QBO menu when clicking outside
   useEffect(() => {
@@ -105,8 +108,29 @@ export function Header({ userEmail }: HeaderProps) {
           <span className="text-xl font-bold text-white">CrewCFO</span>
         </a>
 
-        {/* Right side - QBO status, user info and logout */}
+        {/* Right side - Demo banner, QBO status, user info and logout */}
         <div className="flex items-center gap-3">
+          {/* Demo Mode Banner */}
+          {isDemoMode && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex items-center gap-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/50 text-amber-400 text-sm px-3 py-1.5 rounded-lg"
+            >
+              <span>🎭</span>
+              <span className="hidden sm:inline font-medium">Demo: {demoCompanyName}</span>
+              <span className="sm:hidden font-medium">Demo</span>
+              {onExitDemo && (
+                <button
+                  onClick={onExitDemo}
+                  className="ml-2 text-xs bg-amber-500/30 hover:bg-amber-500/50 px-2 py-0.5 rounded transition"
+                >
+                  Exit
+                </button>
+              )}
+            </motion.div>
+          )}
+
           {/* QBO Connection Button */}
           {qboConnected === null ? (
             <span className="text-xs text-slate-500">...</span>

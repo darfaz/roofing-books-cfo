@@ -120,10 +120,11 @@ const EFFORT_COLORS: Record<string, string> = {
 
 interface ShockReportProps {
   accessToken: string
+  isDemoMode?: boolean
   onStartTrial?: () => void
 }
 
-export function ShockReport({ accessToken, onStartTrial }: ShockReportProps) {
+export function ShockReport({ accessToken, isDemoMode = false, onStartTrial }: ShockReportProps) {
   const [reportData, setReportData] = useState<ShockReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
@@ -134,6 +135,17 @@ export function ShockReport({ accessToken, onStartTrial }: ShockReportProps) {
     try {
       setLoading(true)
       setError(null)
+
+      // Demo mode - fetch from demo endpoint
+      if (isDemoMode) {
+        const response = await fetch('/api/demo/shock-report')
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result.detail || 'Failed to fetch demo data')
+        }
+        setReportData(result)
+        return
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       const tenantId = user?.user_metadata?.tenant_id
@@ -168,7 +180,7 @@ export function ShockReport({ accessToken, onStartTrial }: ShockReportProps) {
     } finally {
       setLoading(false)
     }
-  }, [accessToken])
+  }, [accessToken, isDemoMode])
 
   const generateReport = async () => {
     try {

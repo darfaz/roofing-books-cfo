@@ -10,6 +10,7 @@ import { OwnerDashboard } from './OwnerDashboard'
 import { FinanceDashboard } from './FinanceDashboard'
 import { Tabs } from './ui/Tabs'
 import { GlassCard } from './ui/GlassCard'
+import { useDemoMode } from '../context/DemoContext'
 
 interface ValuationSnapshot {
   id: string
@@ -36,16 +37,44 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'leaks' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
   const [qboConnected, setQboConnected] = useState<boolean | null>(null)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
+  const { isDemoMode, demoCompanyName } = useDemoMode()
 
   useEffect(() => {
     void fetchValuationData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken])
+  }, [accessToken, isDemoMode])
 
   const fetchValuationData = async () => {
     try {
       setLoading(true)
       setError(null)
+
+      // In demo mode, fetch from demo endpoint
+      if (isDemoMode) {
+        const response = await fetch('/api/demo/dashboard')
+        if (response.ok) {
+          const demoData = await response.json()
+          // Create a snapshot-like object from demo data
+          setSnapshot({
+            id: 'demo-snapshot',
+            as_of_date: new Date().toISOString().split('T')[0],
+            ttm_revenue: demoData.annual_revenue || 3500000,
+            ttm_sde: demoData.owner_view?.sde || 350000,
+            ttm_ebitda: demoData.owner_view?.ebitda || 245000,
+            tier: 'below_avg',
+            multiple_low: 2.5,
+            multiple_high: 3.5,
+            ev_low: 735000,
+            ev_high: 980000,
+            confidence_score: 85,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          setQboConnected(true) // Simulate connected in demo
+        }
+        setLoading(false)
+        return
+      }
 
       // Get user's tenant_id from session
       const { data: { user } } = await supabase.auth.getUser()
@@ -287,7 +316,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <OwnerDashboard />
+                <OwnerDashboard isDemoMode={isDemoMode} />
               </motion.div>
             )}
             {activeTab === 'finance' && (
@@ -297,7 +326,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <FinanceDashboard accessToken={accessToken} />
+                <FinanceDashboard accessToken={accessToken} isDemoMode={isDemoMode} />
               </motion.div>
             )}
             {activeTab === 'leaks' && (
@@ -307,7 +336,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <ProfitLeakReport accessToken={accessToken} />
+                <ProfitLeakReport accessToken={accessToken} isDemoMode={isDemoMode} />
               </motion.div>
             )}
 
@@ -320,6 +349,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
               >
                 <ShockReport
                   accessToken={accessToken}
+                  isDemoMode={isDemoMode}
                   onStartTrial={() => {
                     // TODO: Implement trial flow
                     console.log('Trial started')
@@ -337,6 +367,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
               >
                 <ScenarioSimulator
                   accessToken={accessToken}
+                  isDemoMode={isDemoMode}
                   currentEbitda={snapshot.ttm_ebitda}
                   currentMultiple={Number(currentMultipleAvg.toFixed(2))}
                   currentEvLow={snapshot.ev_low}
@@ -352,7 +383,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <ExitReadiness accessToken={accessToken} />
+                <ExitReadiness accessToken={accessToken} isDemoMode={isDemoMode} />
               </motion.div>
             )}
 
@@ -363,7 +394,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <ValuationRoadmap accessToken={accessToken} />
+                <ValuationRoadmap accessToken={accessToken} isDemoMode={isDemoMode} />
               </motion.div>
             )}
           </AnimatePresence>

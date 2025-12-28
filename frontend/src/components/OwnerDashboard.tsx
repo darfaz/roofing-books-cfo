@@ -74,21 +74,49 @@ const MOCK_DATA = {
   },
 }
 
-export function OwnerDashboard() {
+interface OwnerDashboardProps {
+  isDemoMode?: boolean
+}
+
+export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
   const [cash, setCash] = useState<CashPosition>(MOCK_DATA.cash)
-  const [revenue] = useState<Revenue>(MOCK_DATA.revenue)
-  const [arAging] = useState<ARBucket>(MOCK_DATA.arAging)
+  const [revenue, setRevenue] = useState<Revenue>(MOCK_DATA.revenue)
+  const [arAging, setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
   const [forecast, setForecast] = useState<ForecastWeek[]>(MOCK_DATA.forecast)
-  const [jobs] = useState<Job[]>(MOCK_DATA.jobs)
+  const [jobs, setJobs] = useState<Job[]>(MOCK_DATA.jobs)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     void fetchDashboardData()
-  }, [])
+  }, [isDemoMode])
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
+
+      // In demo mode, fetch from demo endpoint
+      if (isDemoMode) {
+        const response = await fetch('/api/demo/dashboard')
+        if (response.ok) {
+          const demoData = await response.json()
+          setCash({
+            total_cash: demoData.cash_position || 127450,
+            runway_weeks: demoData.runway_weeks || 12,
+            change_wow: 0.08,
+          })
+          setRevenue({
+            mtd: demoData.revenue_mtd || 87500,
+            target: 100000,
+            progress: (demoData.revenue_mtd || 87500) / 100000,
+          })
+          if (demoData.jobs) {
+            setJobs(demoData.jobs)
+          }
+        }
+        setLoading(false)
+        return
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       const tenantId = user?.user_metadata?.tenant_id
 

@@ -18,12 +18,14 @@ type SimulationResponse = {
 
 export function ScenarioSimulator(props: {
   accessToken: string
+  isDemoMode?: boolean
   currentEbitda: number
   currentMultiple: number
   currentEvLow: number
   currentEvHigh: number
   currentOwnerHoursPerWeek?: number
 }) {
+  const isDemoMode = props.isDemoMode ?? false
   const currentOwnerHours = Math.max(0, props.currentOwnerHoursPerWeek ?? 40)
 
   const [recurringRevenueDeltaPct, setRecurringRevenueDeltaPct] = useState(0) // -20..100
@@ -64,6 +66,37 @@ export function ScenarioSimulator(props: {
           setLoading(true)
           setError(null)
 
+          // Demo mode - use local simulation
+          if (isDemoMode) {
+            // Simple local simulation for demo
+            const baseEbitda = props.currentEbitda
+            const baseMultiple = props.currentMultiple
+
+            // Calculate impacts based on levers
+            const recurringImpact = baseEbitda * (levers.recurring_revenue_delta * 0.3)
+            const marginImpact = baseEbitda * (levers.margin_delta * 2)
+            const ownerImpact = levers.owner_hours_delta < 0 ? Math.abs(levers.owner_hours_delta) * 1500 : 0
+            const productivityImpact = baseEbitda * (levers.productivity_delta * 0.5)
+
+            const projectedEbitda = baseEbitda + recurringImpact + marginImpact + ownerImpact + productivityImpact
+
+            // Multiple adjustments
+            let multipleAdjust = 0
+            if (levers.recurring_revenue_delta > 0.1) multipleAdjust += 0.3
+            if (levers.owner_hours_delta < -10) multipleAdjust += 0.2
+            if (levers.margin_delta > 0.03) multipleAdjust += 0.2
+
+            const projectedMultiple = baseMultiple + multipleAdjust
+
+            setResult({
+              projected_ebitda: Math.round(projectedEbitda),
+              projected_multiple: Number(projectedMultiple.toFixed(2)),
+              projected_ev_low: Math.round(projectedEbitda * (projectedMultiple - 0.5)),
+              projected_ev_high: Math.round(projectedEbitda * (projectedMultiple + 0.5)),
+            })
+            return
+          }
+
           const res = await fetch(`${API_BASE_URL}/api/valuation/simulate`, {
             method: 'POST',
             headers: authHeaders,
@@ -89,7 +122,7 @@ export function ScenarioSimulator(props: {
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current)
     }
-  }, [levers, authHeaders])
+  }, [levers, authHeaders, isDemoMode, props.currentEbitda, props.currentMultiple])
 
   const formatCurrency = (value: number): string =>
     new Intl.NumberFormat('en-US', {
@@ -293,6 +326,8 @@ export function ScenarioSimulator(props: {
     </div>
   )
 }
+
+
 
 
 

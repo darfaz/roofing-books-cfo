@@ -140,7 +140,12 @@ const CIM_OUTLINE = `# Confidential Information Memorandum (CIM) Outline
 - Safety/insurance documentation
 `
 
-export function ExitReadiness({ accessToken }: { accessToken: string }) {
+interface ExitReadinessProps {
+  accessToken: string
+  isDemoMode?: boolean
+}
+
+export function ExitReadiness({ accessToken, isDemoMode = false }: ExitReadinessProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [documents, setDocuments] = useState<UploadedDoc[]>([])
@@ -153,6 +158,64 @@ export function ExitReadiness({ accessToken }: { accessToken: string }) {
     try {
       setLoading(true)
       setError(null)
+
+      // Demo mode - show sample documents
+      if (isDemoMode) {
+        const demoDocuments: UploadedDoc[] = [
+          {
+            id: 'demo-1',
+            checklist_key: 'financial_statements',
+            file_name: '2024_P&L_Statement.pdf',
+            content_type: 'application/pdf',
+            size_bytes: 245678,
+            created_at: new Date().toISOString(),
+            storage_bucket: 'demo',
+            storage_path: 'demo/financial_statements/2024_PL.pdf',
+          },
+          {
+            id: 'demo-2',
+            checklist_key: 'financial_statements',
+            file_name: '2024_Balance_Sheet.pdf',
+            content_type: 'application/pdf',
+            size_bytes: 189234,
+            created_at: new Date().toISOString(),
+            storage_bucket: 'demo',
+            storage_path: 'demo/financial_statements/2024_BS.pdf',
+          },
+          {
+            id: 'demo-3',
+            checklist_key: 'tax_returns',
+            file_name: '2023_Federal_Tax_Return.pdf',
+            content_type: 'application/pdf',
+            size_bytes: 567890,
+            created_at: new Date().toISOString(),
+            storage_bucket: 'demo',
+            storage_path: 'demo/tax_returns/2023_federal.pdf',
+          },
+          {
+            id: 'demo-4',
+            checklist_key: 'org_chart',
+            file_name: 'Apex_Roofing_Org_Chart.pdf',
+            content_type: 'application/pdf',
+            size_bytes: 123456,
+            created_at: new Date().toISOString(),
+            storage_bucket: 'demo',
+            storage_path: 'demo/org_chart/apex_org.pdf',
+          },
+          {
+            id: 'demo-5',
+            checklist_key: 'safety_insurance',
+            file_name: 'General_Liability_Policy.pdf',
+            content_type: 'application/pdf',
+            size_bytes: 345678,
+            created_at: new Date().toISOString(),
+            storage_bucket: 'demo',
+            storage_path: 'demo/safety_insurance/gl_policy.pdf',
+          },
+        ]
+        setDocuments(demoDocuments)
+        return
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       const tenantId = user?.user_metadata?.tenant_id

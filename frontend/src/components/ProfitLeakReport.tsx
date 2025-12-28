@@ -82,9 +82,10 @@ const HEALTH_STATUS_CONFIG = {
 
 interface ProfitLeakReportProps {
   accessToken: string
+  isDemoMode?: boolean
 }
 
-export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
+export function ProfitLeakReport({ accessToken, isDemoMode = false }: ProfitLeakReportProps) {
   const [analysis, setAnalysis] = useState<OverheadAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -95,6 +96,17 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
     try {
       setLoading(true)
       setError(null)
+
+      // Demo mode - use simulated data
+      if (isDemoMode) {
+        const response = await fetch('/api/demo/profit-leaks')
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result.detail || 'Failed to fetch demo data')
+        }
+        setAnalysis(result)
+        return
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       const tid = user?.user_metadata?.tenant_id
@@ -123,11 +135,16 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
     } finally {
       setLoading(false)
     }
-  }, [accessToken])
+  }, [accessToken, isDemoMode])
 
   useEffect(() => {
     void fetchAnalysis()
   }, [fetchAnalysis])
+
+  // Refetch when demo mode changes
+  useEffect(() => {
+    void fetchAnalysis()
+  }, [isDemoMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
@@ -174,7 +191,7 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
     )
   }
 
-  if (error) {
+  if (error && !isDemoMode) {
     const needsReconnect = error.toLowerCase().includes('reconnect') || error.toLowerCase().includes('expired')
 
     const handleReconnectQbo = () => {
@@ -184,39 +201,52 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
     }
 
     return (
-      <GlassCard variant="danger">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">⚠️</span>
-          <div>
-            <div className="font-semibold text-red-300">Error Loading Report</div>
-            <div className="text-sm text-red-400/80">{error}</div>
+      <div className="space-y-4">
+        <GlassCard variant="danger">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <div className="font-semibold text-red-300">Error Loading Report</div>
+              <div className="text-sm text-red-400/80">{error}</div>
+            </div>
           </div>
-        </div>
-        <div className="mt-4 flex gap-3">
-          {needsReconnect && tenantId ? (
+          <div className="mt-4 flex gap-3 flex-wrap">
+            {needsReconnect && tenantId ? (
+              <motion.button
+                onClick={handleReconnectQbo}
+                className="bg-[#2CA01C] hover:bg-[#3AB82A] text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                Reconnect QuickBooks
+              </motion.button>
+            ) : (
+              <motion.button
+                onClick={() => void fetchAnalysis()}
+                className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm transition"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Try Again
+              </motion.button>
+            )}
             <motion.button
-              onClick={handleReconnectQbo}
-              className="bg-[#2CA01C] hover:bg-[#3AB82A] text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2"
+              onClick={() => window.location.reload()}
+              className="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 px-4 py-2 rounded-lg text-sm transition flex items-center gap-2"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-              </svg>
-              Reconnect QuickBooks
+              🔄 Reload Page
             </motion.button>
-          ) : (
-            <motion.button
-              onClick={() => void fetchAnalysis()}
-              className="bg-red-500/20 hover:bg-red-500/30 text-red-300 px-4 py-2 rounded-lg text-sm transition"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              Try Again
-            </motion.button>
-          )}
-        </div>
-      </GlassCard>
+          </div>
+        </GlassCard>
+        <p className="text-center text-sm text-slate-500">
+          No QuickBooks connected? Return to login and click "View Interactive Demo" to see sample data.
+        </p>
+      </div>
     )
   }
 
@@ -236,6 +266,18 @@ export function ProfitLeakReport({ accessToken }: ProfitLeakReportProps) {
 
   return (
     <div className="space-y-6">
+      {/* Demo Mode Banner */}
+      {isDemoMode && (
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="bg-amber-500/20 border border-amber-500/50 text-amber-300 px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+        >
+          <span className="text-lg">🎭</span>
+          <span><strong>Demo Mode:</strong> Apex Roofing Solutions - $3.5M roofing contractor</span>
+        </motion.div>
+      )}
+
       {/* Hero Section - Break-Even */}
       <GlassCard padding="lg" glow>
         <motion.div

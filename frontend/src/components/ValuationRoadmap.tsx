@@ -58,7 +58,12 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
   low: { label: 'Low', color: 'text-slate-400' },
 }
 
-export function ValuationRoadmap({ accessToken }: { accessToken: string }) {
+interface ValuationRoadmapProps {
+  accessToken: string
+  isDemoMode?: boolean
+}
+
+export function ValuationRoadmap({ accessToken, isDemoMode = false }: ValuationRoadmapProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<RoadmapItem[]>([])
@@ -69,6 +74,17 @@ export function ValuationRoadmap({ accessToken }: { accessToken: string }) {
     try {
       setLoading(true)
       setError(null)
+
+      // Demo mode - fetch from demo endpoint
+      if (isDemoMode) {
+        const response = await fetch('/api/demo/roadmap')
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result.detail || 'Failed to fetch demo data')
+        }
+        setItems(result)
+        return
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       const tenantId = user?.user_metadata?.tenant_id

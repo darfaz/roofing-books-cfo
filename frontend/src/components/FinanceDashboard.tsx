@@ -90,9 +90,10 @@ interface BudgetVariance {
 
 interface FinanceDashboardProps {
   accessToken: string
+  isDemoMode?: boolean
 }
 
-export function FinanceDashboard({ accessToken }: FinanceDashboardProps) {
+export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDashboardProps) {
   const [cashAlert, setCashAlert] = useState<CashAlertStatus | null>(null)
   const [allScenarios, setAllScenarios] = useState<{
     base: CashForecast
@@ -106,12 +107,26 @@ export function FinanceDashboard({ accessToken }: FinanceDashboardProps) {
 
   useEffect(() => {
     void fetchFinanceData()
-  }, [])
+  }, [isDemoMode])
 
   const fetchFinanceData = async () => {
     try {
       setLoading(true)
       setError(null)
+
+      // In demo mode, fetch from demo endpoint
+      if (isDemoMode) {
+        const response = await fetch('/api/demo/finance')
+        if (response.ok) {
+          const demoData = await response.json()
+          setCashAlert(demoData.cash_alert || null)
+          setAllScenarios(demoData.scenarios || null)
+          setAPAging(demoData.ap_aging || null)
+          setBudgetVariance(demoData.budget_variance || null)
+        }
+        setLoading(false)
+        return
+      }
 
       const { data: { user } } = await supabase.auth.getUser()
       const tenantId = user?.user_metadata?.tenant_id
