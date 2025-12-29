@@ -37,7 +37,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'leaks' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
   const [qboConnected, setQboConnected] = useState<boolean | null>(null)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
-  const { isDemoMode, demoCompanyName } = useDemoMode()
+  const { isDemoMode } = useDemoMode()
 
   useEffect(() => {
     void fetchValuationData()

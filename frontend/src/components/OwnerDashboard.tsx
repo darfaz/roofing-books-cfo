@@ -81,7 +81,7 @@ interface OwnerDashboardProps {
 export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
   const [cash, setCash] = useState<CashPosition>(MOCK_DATA.cash)
   const [revenue, setRevenue] = useState<Revenue>(MOCK_DATA.revenue)
-  const [arAging, setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
+  const [arAging, _setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
   const [forecast, setForecast] = useState<ForecastWeek[]>(MOCK_DATA.forecast)
   const [jobs, setJobs] = useState<Job[]>(MOCK_DATA.jobs)
   const [loading, setLoading] = useState(true)
