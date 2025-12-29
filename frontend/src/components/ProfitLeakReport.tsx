@@ -99,12 +99,75 @@ export function ProfitLeakReport({ accessToken, isDemoMode = false }: ProfitLeak
 
       // Demo mode - use simulated data
       if (isDemoMode) {
-        const response = await fetch('/api/demo/profit-leaks')
-        const result = await response.json()
-        if (!response.ok) {
-          throw new Error(result.detail || 'Failed to fetch demo data')
+        // Use hardcoded demo data that matches the OverheadAnalysis format
+        const demoAnalysis: OverheadAnalysis = {
+          period: {
+            start: '2024-12-01',
+            end: '2025-11-30',
+            months: 12,
+          },
+          overhead: {
+            total: 546000,
+            monthly_average: 45500,
+            by_category: {
+              payroll: 216000,
+              insurance: 84000,
+              office: 72000,
+              professional_fees: 48000,
+              marketing: 60000,
+              utilities: 36000,
+              other_overhead: 30000,
+            },
+            monthly_trend: {},
+            transaction_count: 847,
+          },
+          job_costs: {
+            total: 2730000,
+            monthly_average: 227500,
+            by_category: {
+              materials: 1225000,
+              direct_labor: 630000,
+              subcontractors: 455000,
+              equipment: 245000,
+              disposal: 105000,
+              permits: 70000,
+            },
+            transaction_count: 1523,
+          },
+          revenue: {
+            total: 3500000,
+            monthly_average: 291667,
+          },
+          profitability: {
+            gross_margin: 0.22,
+            gross_margin_pct: '22%',
+            gross_profit_monthly: 64167,
+          },
+          break_even: {
+            current_margin: {
+              margin: 0.22,
+              monthly: 206818,
+              annual: 2481818,
+            },
+            scenarios: {
+              '15%': { margin: 0.15, monthly_break_even: 303333, annual_break_even: 3640000, is_current: false },
+              '20%': { margin: 0.20, monthly_break_even: 227500, annual_break_even: 2730000, is_current: false },
+              '25%': { margin: 0.25, monthly_break_even: 182000, annual_break_even: 2184000, is_current: false },
+              '30%': { margin: 0.30, monthly_break_even: 151667, annual_break_even: 1820000, is_current: false },
+              '35%': { margin: 0.35, monthly_break_even: 130000, annual_break_even: 1560000, is_current: false },
+            },
+          },
+          mixed_expenses: {
+            total: 45000,
+            count: 23,
+            note: 'Personal expenses mixed with business',
+          },
+          confidence: {
+            overhead_avg: 0.85,
+            job_cost_avg: 0.92,
+          },
         }
-        setAnalysis(result)
+        setAnalysis(demoAnalysis)
         return
       }
 
