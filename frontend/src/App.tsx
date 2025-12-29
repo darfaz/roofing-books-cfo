@@ -15,6 +15,14 @@ function AppContent() {
   // Check if we're on the /demo route (handles both /demo and /dashboard/demo)
   const isDemoRoute = window.location.pathname.endsWith('/demo')
 
+  // CRITICAL: Sync demo mode with URL - clear demo mode when NOT on demo route
+  // This fixes the bug where localStorage persists demo mode after navigating away
+  useEffect(() => {
+    if (!isDemoRoute && isDemoMode) {
+      setDemoMode(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     // Initial session
     supabase.auth.getSession().then(({ data }) => {
