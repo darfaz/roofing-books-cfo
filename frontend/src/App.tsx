@@ -12,8 +12,8 @@ function AppContent() {
   const [loading, setLoading] = useState(true)
   const { isDemoMode, setDemoMode, demoEmail, setDemoEmail } = useDemoMode()
 
-  // Check if we're on the /demo route
-  const isDemoRoute = window.location.pathname === '/demo'
+  // Check if we're on the /demo route (handles both /demo and /dashboard/demo)
+  const isDemoRoute = window.location.pathname.endsWith('/demo')
 
   useEffect(() => {
     // Initial session
