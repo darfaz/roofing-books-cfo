@@ -49,29 +49,25 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
       setLoading(true)
       setError(null)
 
-      // In demo mode, fetch from demo endpoint
+      // In demo mode, use hardcoded demo data
       if (isDemoMode) {
-        const response = await fetch('/api/demo/dashboard')
-        if (response.ok) {
-          const demoData = await response.json()
-          // Create a snapshot-like object from demo data
-          setSnapshot({
-            id: 'demo-snapshot',
-            as_of_date: new Date().toISOString().split('T')[0],
-            ttm_revenue: demoData.annual_revenue || 3500000,
-            ttm_sde: demoData.owner_view?.sde || 350000,
-            ttm_ebitda: demoData.owner_view?.ebitda || 245000,
-            tier: 'below_avg',
-            multiple_low: 2.5,
-            multiple_high: 3.5,
-            ev_low: 735000,
-            ev_high: 980000,
-            confidence_score: 85,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          setQboConnected(true) // Simulate connected in demo
-        }
+        // Apex Roofing Solutions demo data
+        setSnapshot({
+          id: 'demo-snapshot',
+          as_of_date: new Date().toISOString().split('T')[0],
+          ttm_revenue: 3500000,
+          ttm_sde: 350000,
+          ttm_ebitda: 245000,
+          tier: 'below_avg',
+          multiple_low: 2.5,
+          multiple_high: 3.5,
+          ev_low: 612500,
+          ev_high: 857500,
+          confidence_score: 72,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        setQboConnected(true) // Simulate connected in demo
         setLoading(false)
         return
       }
