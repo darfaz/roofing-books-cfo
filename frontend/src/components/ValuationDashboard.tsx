@@ -49,24 +49,49 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
       setLoading(true)
       setError(null)
 
-      // In demo mode, use hardcoded demo data
+      // In demo mode, fetch from demo API or use fallback data
       if (isDemoMode) {
-        // Apex Roofing Solutions demo data
-        setSnapshot({
-          id: 'demo-snapshot',
-          as_of_date: new Date().toISOString().split('T')[0],
-          ttm_revenue: 3500000,
-          ttm_sde: 350000,
-          ttm_ebitda: 245000,
-          tier: 'below_avg',
-          multiple_low: 2.5,
-          multiple_high: 3.5,
-          ev_low: 612500,
-          ev_high: 857500,
-          confidence_score: 72,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        try {
+          const response = await fetch('/api/demo/dashboard')
+          if (response.ok) {
+            const demoData = await response.json()
+            const data = demoData.data || demoData
+            setSnapshot({
+              id: 'demo-snapshot',
+              as_of_date: new Date().toISOString().split('T')[0],
+              ttm_revenue: data.summary?.ttm_revenue || 3500000,
+              ttm_sde: data.summary?.ttm_profit ? data.summary.ttm_profit * 1.4 : 350000,
+              ttm_ebitda: data.summary?.ttm_profit || 245000,
+              tier: 'below_avg',
+              multiple_low: 2.5,
+              multiple_high: 3.5,
+              ev_low: (data.summary?.ttm_profit || 245000) * 2.5,
+              ev_high: (data.summary?.ttm_profit || 245000) * 3.5,
+              confidence_score: 72,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+          } else {
+            throw new Error('Demo API not available')
+          }
+        } catch {
+          // Fallback to hardcoded demo data
+          setSnapshot({
+            id: 'demo-snapshot',
+            as_of_date: new Date().toISOString().split('T')[0],
+            ttm_revenue: 3500000,
+            ttm_sde: 350000,
+            ttm_ebitda: 245000,
+            tier: 'below_avg',
+            multiple_low: 2.5,
+            multiple_high: 3.5,
+            ev_low: 612500,
+            ev_high: 857500,
+            confidence_score: 72,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+        }
         setQboConnected(true) // Simulate connected in demo
         setLoading(false)
         return
