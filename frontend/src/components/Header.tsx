@@ -200,6 +200,15 @@ export function Header({ userEmail, onExitDemo }: HeaderProps) {
               {userEmail}
             </span>
           )}
+          {/* View Demo link for logged-in users not in demo mode */}
+          {!isDemoMode && (
+            <a
+              href="/dashboard/demo"
+              className="text-sm text-amber-400 hover:text-amber-300 transition hidden sm:block"
+            >
+              View Demo
+            </a>
+          )}
           <button
             onClick={() => setShowSupportModal(true)}
             className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
