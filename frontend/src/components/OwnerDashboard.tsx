@@ -37,7 +37,46 @@ interface Job {
   status: string
 }
 
-// Mock data for demo purposes
+// Demo data for Apex Roofing Solutions ($3.5M roofing contractor)
+const DEMO_DATA = {
+  cash: {
+    total_cash: 187500,
+    runway_weeks: 14,
+    change_wow: 0.12,
+  },
+  revenue: {
+    mtd: 292000,
+    target: 320000,
+    progress: 0.9125,
+  },
+  arAging: {
+    current: 125000,
+    '1-30': 68000,
+    '31-60': 32000,
+    '61-90': 18000,
+    '90+': 8500,
+  },
+  forecast: Array.from({ length: 13 }, (_, i) => ({
+    week_start_date: new Date(Date.now() + i * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    ending_cash: 187500 + (i * 8500) - (i % 3 === 0 ? 22000 : 0) + (i % 4 === 0 ? 35000 : 0),
+    optimistic_cash: 187500 + (i * 12000),
+    pessimistic_cash: 187500 + (i * 3500) - (i % 2 === 0 ? 15000 : 0),
+  })),
+  jobs: [
+    { name: 'Henderson Commercial Plaza', revenue: 85000, margin: 0.34, status: 'in_progress' },
+    { name: 'Oakwood HOA - Phase 2', revenue: 125000, margin: 0.31, status: 'in_progress' },
+    { name: 'Martinez Insurance Claim', revenue: 28500, margin: 0.42, status: 'completed' },
+    { name: 'Thompson Estate Reroof', revenue: 45000, margin: 0.36, status: 'scheduled' },
+    { name: 'Downtown Office Complex', revenue: 175000, margin: 0.29, status: 'scheduled' },
+    { name: 'Wilson Hail Damage Repair', revenue: 18500, margin: 0.38, status: 'completed' },
+  ],
+  backlog: {
+    amount: 485000,
+    jobs: 12,
+  },
+}
+
+// Mock data for regular users without QB connected
 const MOCK_DATA = {
   cash: {
     total_cash: 127450,
@@ -81,7 +120,7 @@ interface OwnerDashboardProps {
 export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
   const [cash, setCash] = useState<CashPosition>(MOCK_DATA.cash)
   const [revenue, setRevenue] = useState<Revenue>(MOCK_DATA.revenue)
-  const [arAging, _setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
+  const [arAging, setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
   const [forecast, setForecast] = useState<ForecastWeek[]>(MOCK_DATA.forecast)
   const [jobs, setJobs] = useState<Job[]>(MOCK_DATA.jobs)
   const [loading, setLoading] = useState(true)
@@ -94,25 +133,13 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
     try {
       setLoading(true)
 
-      // In demo mode, fetch from demo endpoint
+      // In demo mode, use hardcoded Apex Roofing Solutions data
       if (isDemoMode) {
-        const response = await fetch('/api/demo/dashboard')
-        if (response.ok) {
-          const demoData = await response.json()
-          setCash({
-            total_cash: demoData.cash_position || 127450,
-            runway_weeks: demoData.runway_weeks || 12,
-            change_wow: 0.08,
-          })
-          setRevenue({
-            mtd: demoData.revenue_mtd || 87500,
-            target: 100000,
-            progress: (demoData.revenue_mtd || 87500) / 100000,
-          })
-          if (demoData.jobs) {
-            setJobs(demoData.jobs)
-          }
-        }
+        setCash(DEMO_DATA.cash)
+        setRevenue(DEMO_DATA.revenue)
+        setArAging(DEMO_DATA.arAging)
+        setForecast(DEMO_DATA.forecast)
+        setJobs(DEMO_DATA.jobs)
         setLoading(false)
         return
       }
@@ -270,8 +297,8 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
         />
         <MetricCard
           label="Backlog"
-          value={formatCurrency(MOCK_DATA.backlog.amount)}
-          subValue={`${MOCK_DATA.backlog.jobs} jobs scheduled`}
+          value={formatCurrency(isDemoMode ? DEMO_DATA.backlog.amount : MOCK_DATA.backlog.amount)}
+          subValue={`${isDemoMode ? DEMO_DATA.backlog.jobs : MOCK_DATA.backlog.jobs} jobs scheduled`}
           trend="neutral"
           icon="🔧"
         />

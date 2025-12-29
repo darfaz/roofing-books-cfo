@@ -93,6 +93,134 @@ interface FinanceDashboardProps {
   isDemoMode?: boolean
 }
 
+// Demo data for Apex Roofing Solutions ($3.5M roofing contractor)
+const generateDemoWeeklyForecast = (scenario: 'base' | 'optimistic' | 'pessimistic'): WeeklyForecast[] => {
+  const multipliers = { base: 1, optimistic: 1.2, pessimistic: 0.75 }
+  const m = multipliers[scenario]
+  let cash = 187500
+
+  return Array.from({ length: 13 }, (_, i) => {
+    const weekNum = i + 1
+    const startDate = new Date(Date.now() + i * 7 * 24 * 60 * 60 * 1000)
+    const endDate = new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)
+    const startingCash = cash
+    const collections = (42000 + (i % 3 === 0 ? 25000 : 0)) * m
+    const apPayments = 28000 + (i % 2 === 0 ? 12000 : 0)
+    const recurring = 8500
+    const netFlow = collections - apPayments - recurring
+    cash = cash + netFlow
+
+    return {
+      week_number: weekNum,
+      week_start: startDate.toISOString().split('T')[0],
+      week_end: endDate.toISOString().split('T')[0],
+      starting_cash: startingCash,
+      ending_cash: cash,
+      net_cash_flow: netFlow,
+      inflows: { collections, total: collections },
+      outflows: { ap_payments: apPayments, recurring_expenses: recurring, total: apPayments + recurring },
+    }
+  })
+}
+
+const DEMO_FINANCE_DATA = {
+  cashAlert: {
+    status: 'good' as const,
+    color: 'green' as const,
+    message: 'Cash position is healthy with 14+ weeks of runway. Strong AR collections expected.',
+    runway_weeks: 14,
+    current_cash: 187500,
+    min_projected_cash: 145000,
+    min_cash_week: 6,
+    recommendations: [
+      'Consider accelerating collection on $18,000 in 90+ day AR',
+      'Review upcoming $40,000 AP payment - negotiate extended terms if needed',
+      'Strong position to invest in growth initiatives',
+    ],
+  },
+  scenarios: {
+    base: {
+      forecast_date: new Date().toISOString(),
+      scenario: 'base',
+      starting_cash: 187500,
+      ending_cash: 285000,
+      min_cash: 145000,
+      min_cash_week: 6,
+      runway_weeks: 14,
+      ar_total: 251500,
+      ap_total: 89000,
+      summary: {
+        total_inflows: 546000,
+        total_outflows: 448500,
+        net_change: 97500,
+      },
+      weekly_forecast: generateDemoWeeklyForecast('base'),
+    },
+    optimistic: {
+      forecast_date: new Date().toISOString(),
+      scenario: 'optimistic',
+      starting_cash: 187500,
+      ending_cash: 385000,
+      min_cash: 187500,
+      min_cash_week: 1,
+      runway_weeks: 20,
+      ar_total: 251500,
+      ap_total: 89000,
+      summary: {
+        total_inflows: 655200,
+        total_outflows: 448500,
+        net_change: 206700,
+      },
+      weekly_forecast: generateDemoWeeklyForecast('optimistic'),
+    },
+    pessimistic: {
+      forecast_date: new Date().toISOString(),
+      scenario: 'pessimistic',
+      starting_cash: 187500,
+      ending_cash: 165000,
+      min_cash: 95000,
+      min_cash_week: 8,
+      runway_weeks: 9,
+      ar_total: 251500,
+      ap_total: 89000,
+      summary: {
+        total_inflows: 409500,
+        total_outflows: 448500,
+        net_change: -22500,
+      },
+      weekly_forecast: generateDemoWeeklyForecast('pessimistic'),
+    },
+  },
+  apAging: {
+    aging: {
+      current: 35000,
+      '1-30': 28000,
+      '31-60': 15000,
+      '61-90': 8000,
+      '90+': 3000,
+    },
+    total: 89000,
+    overdue: 11000,
+    overdue_pct: 12.4,
+  },
+  budgetVariance: {
+    period: 'December 2024',
+    categories: [
+      { category: 'materials', budget: 125000, actual: 118500, variance: -6500, variance_pct: -5.2, status: 'under' as const },
+      { category: 'labor', budget: 95000, actual: 102000, variance: 7000, variance_pct: 7.4, status: 'over' as const },
+      { category: 'equipment_rental', budget: 12000, actual: 11200, variance: -800, variance_pct: -6.7, status: 'under' as const },
+      { category: 'subcontractors', budget: 45000, actual: 43500, variance: -1500, variance_pct: -3.3, status: 'on_track' as const },
+      { category: 'overhead', budget: 28000, actual: 29500, variance: 1500, variance_pct: 5.4, status: 'over' as const },
+    ],
+    totals: {
+      budget: 305000,
+      actual: 304700,
+      variance: -300,
+      variance_pct: -0.1,
+    },
+  },
+}
+
 export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDashboardProps) {
   const [cashAlert, setCashAlert] = useState<CashAlertStatus | null>(null)
   const [allScenarios, setAllScenarios] = useState<{
@@ -114,16 +242,12 @@ export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDas
       setLoading(true)
       setError(null)
 
-      // In demo mode, fetch from demo endpoint
+      // In demo mode, use hardcoded Apex Roofing Solutions data
       if (isDemoMode) {
-        const response = await fetch('/api/demo/finance')
-        if (response.ok) {
-          const demoData = await response.json()
-          setCashAlert(demoData.cash_alert || null)
-          setAllScenarios(demoData.scenarios || null)
-          setAPAging(demoData.ap_aging || null)
-          setBudgetVariance(demoData.budget_variance || null)
-        }
+        setCashAlert(DEMO_FINANCE_DATA.cashAlert)
+        setAllScenarios(DEMO_FINANCE_DATA.scenarios)
+        setAPAging(DEMO_FINANCE_DATA.apAging)
+        setBudgetVariance(DEMO_FINANCE_DATA.budgetVariance)
         setLoading(false)
         return
       }
