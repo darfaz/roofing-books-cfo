@@ -203,8 +203,8 @@ export function Header({ userEmail, onExitDemo }: HeaderProps) {
 
           {/* Navigation Links */}
           <div className="hidden sm:flex items-center gap-1 bg-slate-800/50 rounded-lg p-1">
-            <a
-              href="/dashboard/"
+            <button
+              onClick={() => { window.location.href = '/dashboard/' }}
               className={`text-sm px-3 py-1.5 rounded-md transition ${
                 !isDemoMode
                   ? 'bg-slate-700 text-white font-medium'
@@ -212,9 +212,9 @@ export function Header({ userEmail, onExitDemo }: HeaderProps) {
               }`}
             >
               Dashboard
-            </a>
-            <a
-              href="/dashboard/demo"
+            </button>
+            <button
+              onClick={() => { window.location.href = '/dashboard/demo' }}
               className={`text-sm px-3 py-1.5 rounded-md transition ${
                 isDemoMode
                   ? 'bg-amber-500/20 text-amber-400 font-medium'
@@ -222,7 +222,7 @@ export function Header({ userEmail, onExitDemo }: HeaderProps) {
               }`}
             >
               Demo
-            </a>
+            </button>
           </div>
 
           <button
