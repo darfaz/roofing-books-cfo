@@ -200,15 +200,31 @@ export function Header({ userEmail, onExitDemo }: HeaderProps) {
               {userEmail}
             </span>
           )}
-          {/* View Demo link for logged-in users not in demo mode */}
-          {!isDemoMode && (
+
+          {/* Navigation Links */}
+          <div className="hidden sm:flex items-center gap-1 bg-slate-800/50 rounded-lg p-1">
+            <a
+              href="/dashboard/"
+              className={`text-sm px-3 py-1.5 rounded-md transition ${
+                !isDemoMode
+                  ? 'bg-slate-700 text-white font-medium'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              Dashboard
+            </a>
             <a
               href="/dashboard/demo"
-              className="text-sm text-amber-400 hover:text-amber-300 transition hidden sm:block"
+              className={`text-sm px-3 py-1.5 rounded-md transition ${
+                isDemoMode
+                  ? 'bg-amber-500/20 text-amber-400 font-medium'
+                  : 'text-slate-400 hover:text-amber-400 hover:bg-slate-700/50'
+              }`}
             >
-              View Demo
+              Demo
             </a>
-          )}
+          </div>
+
           <button
             onClick={() => setShowSupportModal(true)}
             className="text-sm text-slate-400 hover:text-white transition hidden sm:block"
