@@ -5,9 +5,10 @@ FastAPI application for bookkeeping automation
 import os
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from src.services.qbo.sync import QBOSyncService
 import httpx
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -108,12 +109,24 @@ async def qbo_connect(tenant_id: str, return_url: str = "/dashboard"):
 
     return RedirectResponse(auth_url)
 
+def run_initial_sync(tenant_id: str):
+    """Background task to sync QBO data after connection"""
+    try:
+        print(f"[QBO Sync] Starting initial sync for tenant {tenant_id}")
+        sync_service = QBOSyncService(tenant_id)
+        result = sync_service.sync_transactions(start_date=None)  # Last 12 months
+        print(f"[QBO Sync] Completed for tenant {tenant_id}: {result.get('synced_count')} transactions")
+    except Exception as e:
+        print(f"[QBO Sync] Error for tenant {tenant_id}: {e}")
+
+
 @app.get("/auth/qbo/callback")
-async def qbo_callback(code: str, state: str, realmId: str):
+async def qbo_callback(code: str, state: str, realmId: str, background_tasks: BackgroundTasks):
     """
     QuickBooks OAuth callback
 
-    Intuit redirects here after user authorizes
+    Intuit redirects here after user authorizes.
+    Automatically triggers initial data sync in background.
     """
     import base64
     import json
@@ -172,8 +185,13 @@ async def qbo_callback(code: str, state: str, realmId: str):
         on_conflict="tenant_id,provider"
     ).execute()
 
+    # Trigger initial sync in background (doesn't block redirect)
+    background_tasks.add_task(run_initial_sync, tenant_id)
+
     # Redirect to the return URL (dashboard)
-    return RedirectResponse(url=return_url, status_code=302)
+    # Add sync_started param so frontend can show "syncing..." status
+    separator = "&" if "?" in return_url else "?"
+    return RedirectResponse(url=f"{return_url}{separator}sync_started=true", status_code=302)
 
 
 @app.post("/auth/qbo/disconnect")
