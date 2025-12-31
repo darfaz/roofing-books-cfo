@@ -643,7 +643,7 @@ export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDas
         <GlassCard padding="lg">
           <h3 className="text-lg font-semibold text-white mb-4">Budget vs Actual</h3>
 
-          {budgetVariance ? (
+          {budgetVariance && budgetVariance.categories && budgetVariance.categories.length > 0 ? (
             <div className="space-y-4">
               {budgetVariance.categories.slice(0, 5).map((cat) => (
                 <div key={cat.category}>
@@ -687,19 +687,21 @@ export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDas
                 </div>
               ))}
 
-              <div className="pt-4 border-t border-slate-700/50">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Total Variance</span>
-                  <span
-                    className={`font-semibold ${
-                      budgetVariance.totals.variance > 0 ? 'text-red-400' : 'text-emerald-400'
-                    }`}
-                  >
-                    {budgetVariance.totals.variance >= 0 ? '+' : ''}
-                    {formatCurrency(budgetVariance.totals.variance)}
-                  </span>
+              {budgetVariance.totals && (
+                <div className="pt-4 border-t border-slate-700/50">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total Variance</span>
+                    <span
+                      className={`font-semibold ${
+                        budgetVariance.totals.variance > 0 ? 'text-red-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {budgetVariance.totals.variance >= 0 ? '+' : ''}
+                      {formatCurrency(budgetVariance.totals.variance)}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8">
