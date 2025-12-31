@@ -778,7 +778,15 @@ async def get_budget_variance(
             )
 
         budget_service = BudgetService(tenant_id)
-        variance = budget_service.calculate_variance(year, month)
+        try:
+            variance = budget_service.calculate_variance(year, month)
+        except Exception:
+            # If budget calculation fails (e.g., missing tables), return default response
+            variance = {
+                "status": "no_budget",
+                "period": f"{year}-{month:02d}",
+                "message": "Budget tracking not yet configured"
+            }
 
         return {
             "success": True,

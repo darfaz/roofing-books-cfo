@@ -82,6 +82,8 @@ export function Header({ userEmail, onExitDemo }: HeaderProps) {
       if (response.ok) {
         setQboConnected(false)
         setShowQboMenu(false)
+        // Reload page to ensure clean state across all components
+        window.location.reload()
       }
     } catch (error) {
       console.error('Failed to disconnect QBO:', error)

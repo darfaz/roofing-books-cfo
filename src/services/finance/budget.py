@@ -62,14 +62,18 @@ class BudgetService:
         """
         # Try to get from database
         budget_key = f"{year}-{month:02d}"
-        result = self.supabase.table("budgets")\
-            .select("*")\
-            .eq("tenant_id", self.tenant_id)\
-            .eq("budget_period", budget_key)\
-            .execute()
+        try:
+            result = self.supabase.table("budgets")\
+                .select("*")\
+                .eq("tenant_id", self.tenant_id)\
+                .eq("budget_period", budget_key)\
+                .execute()
 
-        if result.data:
-            return result.data[0]
+            if result.data:
+                return result.data[0]
+        except Exception:
+            # Table may not exist yet - use defaults
+            pass
 
         # Return default budget structure
         return {

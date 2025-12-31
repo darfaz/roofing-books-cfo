@@ -160,7 +160,7 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
       const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
       // Fetch deposits (cash inflows)
-      const { data: deposits } = await supabase
+      const { data: deposits, error: depositsErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date')
         .eq('tenant_id', tenantId)
@@ -168,24 +168,36 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
         .gte('transaction_date', last30Days)
 
       // Fetch invoices for revenue and AR
-      const { data: invoices } = await supabase
+      const { data: invoices, error: invoicesErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date, status')
         .eq('tenant_id', tenantId)
         .eq('transaction_type', 'invoice')
 
       // Fetch expenses
-      const { data: expenses } = await supabase
+      const { data: expenses, error: expensesErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date')
         .eq('tenant_id', tenantId)
         .in('transaction_type', ['expense', 'bill'])
         .gte('transaction_date', last30Days)
 
+      // Log for debugging
+      if (depositsErr || invoicesErr || expensesErr) {
+        console.error('Transaction fetch errors:', { depositsErr, invoicesErr, expensesErr })
+      }
+      console.log('Dashboard data fetch:', {
+        tenantId,
+        deposits: deposits?.length || 0,
+        invoices: invoices?.length || 0,
+        expenses: expenses?.length || 0
+      })
+
       // Check if we have real data
       const totalTransactions = (deposits?.length || 0) + (invoices?.length || 0) + (expenses?.length || 0)
       if (totalTransactions === 0) {
         // No synced data yet - keep mock data
+        console.log('No transaction data found - showing sample data')
         setLoading(false)
         return
       }
