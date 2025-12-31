@@ -159,27 +159,27 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
       const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-      // Fetch deposits (cash inflows)
+      // Fetch deposits (cash inflows) - using qbo_type column
       const { data: deposits, error: depositsErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date')
         .eq('tenant_id', tenantId)
-        .eq('transaction_type', 'deposit')
+        .eq('qbo_type', 'Deposit')
         .gte('transaction_date', last30Days)
 
-      // Fetch invoices for revenue and AR
+      // Fetch invoices for revenue and AR - using qbo_type column
       const { data: invoices, error: invoicesErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date, status')
         .eq('tenant_id', tenantId)
-        .eq('transaction_type', 'invoice')
+        .eq('qbo_type', 'Invoice')
 
-      // Fetch expenses
+      // Fetch expenses (purchases) - using qbo_type column
       const { data: expenses, error: expensesErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date')
         .eq('tenant_id', tenantId)
-        .in('transaction_type', ['expense', 'bill'])
+        .eq('qbo_type', 'Purchase')
         .gte('transaction_date', last30Days)
 
       // Log for debugging
