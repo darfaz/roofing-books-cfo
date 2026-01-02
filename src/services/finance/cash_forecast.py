@@ -50,40 +50,38 @@ class CashFlowForecastService:
         Get current cash balance from bank accounts
 
         Returns:
-            Total cash balance across all bank accounts
+            Total cash balance across all bank accounts (actual value, may be $0 or negative)
         """
         # Calculate from deposits minus withdrawals in last 30 days
         # This is a simplified approach - ideally would integrate with bank feeds
         today = date.today()
         start_date = (today - timedelta(days=30)).isoformat()
 
+        # Use qbo_type column (not transaction_type) to match synced QB data
         deposits = self.supabase.table("transactions")\
             .select("total_amount")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("transaction_type", "deposit")\
+            .eq("qbo_type", "Deposit")\
             .gte("transaction_date", start_date)\
             .neq("status", "voided")\
             .execute()
 
         deposit_total = sum(float(t.get("total_amount", 0)) for t in (deposits.data or []))
 
-        # Get payments made
+        # Get payments made - use qbo_type column
         payments = self.supabase.table("transactions")\
             .select("total_amount")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("transaction_type", "bill_payment")\
+            .eq("qbo_type", "BillPayment")\
             .gte("transaction_date", start_date)\
             .neq("status", "voided")\
             .execute()
 
         payment_total = sum(abs(float(t.get("total_amount", 0))) for t in (payments.data or []))
 
-        # Return a reasonable default if we can't calculate
-        if deposit_total == 0 and payment_total == 0:
-            return 50000.0  # Default starting balance
-
-        # This is a rough estimate - real implementation would use bank balance
-        return max(deposit_total - payment_total, 10000.0)
+        # Return actual calculated value - NO fabricated defaults
+        # If no transactions, return 0 (not a fake $50K)
+        return deposit_total - payment_total
 
     def get_ar_aging(self, as_of_date: Optional[date] = None) -> Dict[str, Any]:
         """
@@ -98,11 +96,11 @@ class CashFlowForecastService:
         if not as_of_date:
             as_of_date = date.today()
 
-        # Get unpaid invoices
+        # Get unpaid invoices - use qbo_type column to match synced QB data
         result = self.supabase.table("transactions")\
             .select("id, transaction_date, total_amount, customer_id, memo, metadata")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("transaction_type", "invoice")\
+            .eq("qbo_type", "Invoice")\
             .eq("status", "pending")\
             .neq("status", "voided")\
             .execute()
@@ -231,10 +229,11 @@ class CashFlowForecastService:
         end_date = date.today()
         start_date = end_date - timedelta(days=90)
 
+        # Use qbo_type column to match synced QB data
         expenses = self.supabase.table("transactions")\
             .select("total_amount, memo, category, metadata")\
             .eq("tenant_id", self.tenant_id)\
-            .in_("transaction_type", ["bill", "expense", "bill_payment"])\
+            .in_("qbo_type", ["Bill", "Expense", "BillPayment", "Purchase"])\
             .gte("transaction_date", start_date.isoformat())\
             .neq("status", "voided")\
             .execute()

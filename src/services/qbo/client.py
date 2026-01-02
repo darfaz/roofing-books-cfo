@@ -225,7 +225,120 @@ class QBOClient:
                 return value
 
         return []
-    
+
+    def get_profit_and_loss_report(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        accounting_method: str = "Accrual"
+    ) -> Dict:
+        """
+        Get the official P&L Report from QuickBooks.
+
+        This returns ACTUAL financial data from QBO's reporting engine,
+        not calculated from individual transactions.
+
+        Returns:
+            Dict with income, cogs, expenses, gross_profit, net_income
+            All values are actual QBO data - never fabricated.
+            Returns None for unavailable data.
+        """
+        today = datetime.now().date()
+        if not start_date:
+            # Default to start of current fiscal year
+            start_date = f"{today.year}-01-01"
+        if not end_date:
+            end_date = today.strftime("%Y-%m-%d")
+
+        params = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "accounting_method": accounting_method,
+            "summarize_column_by": "Total"
+        }
+
+        try:
+            response = self._make_request("reports/ProfitAndLoss", params=params)
+        except Exception as e:
+            # Return None values when data is unavailable
+            return {
+                "period": {"start": start_date, "end": end_date},
+                "income": None,
+                "cogs": None,
+                "gross_profit": None,
+                "expenses": None,
+                "net_operating_income": None,
+                "net_income": None,
+                "error": str(e)
+            }
+
+        # Parse the QBO report structure
+        result = {
+            "period": {"start": start_date, "end": end_date},
+            "income": None,
+            "cogs": None,
+            "gross_profit": None,
+            "expenses": None,
+            "net_operating_income": None,
+            "net_income": None,
+            "income_breakdown": {},
+            "cogs_breakdown": {},
+            "expense_breakdown": {}
+        }
+
+        rows = response.get("Rows", {}).get("Row", [])
+
+        for row in rows:
+            group = row.get("group", "")
+            row_type = row.get("type", "")
+
+            # Extract summary value for section totals
+            if row_type == "Section":
+                summary = row.get("Summary", {})
+                col_data = summary.get("ColData", [])
+                if len(col_data) >= 2:
+                    value_str = col_data[1].get("value", "0")
+                    try:
+                        value = float(value_str) if value_str else 0.0
+                    except (ValueError, TypeError):
+                        value = 0.0
+
+                    if group == "Income":
+                        result["income"] = value
+                        # Get breakdown
+                        result["income_breakdown"] = self._parse_pnl_section(row)
+                    elif group == "COGS":
+                        result["cogs"] = value
+                        result["cogs_breakdown"] = self._parse_pnl_section(row)
+                    elif group == "GrossProfit":
+                        result["gross_profit"] = value
+                    elif group == "Expenses":
+                        result["expenses"] = value
+                        result["expense_breakdown"] = self._parse_pnl_section(row)
+                    elif group == "NetOperatingIncome":
+                        result["net_operating_income"] = value
+                    elif group == "NetIncome":
+                        result["net_income"] = value
+
+        return result
+
+    def _parse_pnl_section(self, section: Dict) -> Dict[str, float]:
+        """Parse a P&L section to get account-level breakdown"""
+        breakdown = {}
+        rows = section.get("Rows", {}).get("Row", [])
+        for row in rows:
+            if row.get("type") == "Data":
+                col_data = row.get("ColData", [])
+                if len(col_data) >= 2:
+                    account_name = col_data[0].get("value", "Unknown")
+                    value_str = col_data[1].get("value", "0")
+                    try:
+                        value = float(value_str) if value_str else 0.0
+                    except (ValueError, TypeError):
+                        value = 0.0
+                    breakdown[account_name] = value
+        return breakdown
+
     def get_accounts(self) -> List[Dict]:
         """Get chart of accounts"""
         query_str = "SELECT * FROM Account WHERE Active = true"
@@ -371,13 +484,17 @@ class QBOClient:
         """Get total balance across all cash/bank accounts"""
         query_str = "SELECT * FROM Account WHERE AccountType = 'Bank' AND Active = true"
         accounts = self.query(query_str)
-        
+
         total = 0.0
         for acc in accounts:
             balance = acc.get("CurrentBalance")
-            if balance:
-                total += float(balance.get("value", 0))
-        
+            if balance is not None:
+                # CurrentBalance can be a float directly or an object with "value"
+                if isinstance(balance, dict):
+                    total += float(balance.get("value", 0))
+                else:
+                    total += float(balance)
+
         return total
     
     def get_revenue_mtd(self, start_date: Optional[str] = None) -> Dict:
@@ -778,40 +895,53 @@ class QBOClient:
         avg_monthly_overhead = total_overhead / num_months
         avg_monthly_job_costs = total_job_costs / num_months
 
-        # Get revenue for gross margin calculation
-        revenue_data = self.get_revenue_mtd()  # This is MTD, we need TTM
-        # For now, estimate from invoices
-        invoice_query = (
-            f"SELECT * FROM Invoice "
-            f"WHERE TxnDate >= '{start_date}' AND TxnDate <= '{end_date}'"
-        )
-        invoices = self.query(invoice_query)
-        total_revenue = sum(
-            float(inv.get("TotalAmt", 0) or 0) for inv in invoices
-        )
-        avg_monthly_revenue = total_revenue / num_months if num_months > 0 else 0
+        # Get ACTUAL revenue from QBO P&L Report - NEVER fabricate data
+        pnl_report = self.get_profit_and_loss_report(start_date, end_date)
 
-        # Calculate gross margin
-        if avg_monthly_revenue > 0:
-            gross_profit = avg_monthly_revenue - avg_monthly_job_costs
-            gross_margin = gross_profit / avg_monthly_revenue
+        # Use actual P&L data - return None if unavailable
+        total_revenue = pnl_report.get("income")
+        actual_cogs = pnl_report.get("cogs")
+        actual_gross_profit = pnl_report.get("gross_profit")
+        actual_expenses = pnl_report.get("expenses")
+        actual_net_income = pnl_report.get("net_income")
+
+        # Calculate averages only if data is available
+        if total_revenue is not None and total_revenue > 0 and num_months > 0:
+            avg_monthly_revenue = total_revenue / num_months
         else:
-            gross_margin = 0.30  # Default assumption for roofing
+            avg_monthly_revenue = 0
 
-        # Break-even calculations
+        # Calculate gross margin from ACTUAL data only - never assume
+        if total_revenue is not None and total_revenue > 0:
+            if actual_gross_profit is not None:
+                gross_margin = actual_gross_profit / total_revenue
+            else:
+                # Calculate from actual revenue and COGS
+                actual_cogs_value = actual_cogs if actual_cogs is not None else 0
+                gross_margin = (total_revenue - actual_cogs_value) / total_revenue
+        else:
+            gross_margin = None  # N/A when revenue is unavailable - NEVER fabricate
+
+        # Break-even calculations - only if margin is available
         break_even_scenarios = {}
         for margin in [0.20, 0.25, 0.30, 0.35, 0.40]:
             if margin > 0:
                 monthly_break_even = avg_monthly_overhead / margin
+                is_current = (
+                    gross_margin is not None and abs(margin - gross_margin) < 0.025
+                )
                 break_even_scenarios[f"{int(margin*100)}%"] = {
                     "margin": margin,
                     "monthly_break_even": round(monthly_break_even, 2),
                     "annual_break_even": round(monthly_break_even * 12, 2),
-                    "is_current": abs(margin - gross_margin) < 0.025
+                    "is_current": is_current
                 }
 
-        # Actual break-even at current margin
-        actual_break_even = avg_monthly_overhead / gross_margin if gross_margin > 0 else 0
+        # Actual break-even at current margin - None if margin unavailable
+        if gross_margin is not None and gross_margin > 0:
+            actual_break_even = avg_monthly_overhead / gross_margin
+        else:
+            actual_break_even = None
 
         return {
             "period": {"start": start_date, "end": end_date, "months": num_months},
@@ -838,24 +968,35 @@ class QBOClient:
                 "transaction_count": len(txns["job_cost"])
             },
 
+            # Revenue from ACTUAL QBO P&L - None if unavailable
             "revenue": {
-                "total": round(total_revenue, 2),
-                "monthly_average": round(avg_monthly_revenue, 2)
+                "total": round(total_revenue, 2) if total_revenue is not None else None,
+                "monthly_average": round(avg_monthly_revenue, 2) if total_revenue is not None else None
             },
 
+            # Profitability - use actual data or None
             "profitability": {
-                "gross_margin": round(gross_margin, 4),
-                "gross_margin_pct": f"{gross_margin*100:.1f}%",
-                "gross_profit_monthly": round(avg_monthly_revenue - avg_monthly_job_costs, 2)
+                "gross_margin": round(gross_margin, 4) if gross_margin is not None else None,
+                "gross_margin_pct": f"{gross_margin*100:.1f}%" if gross_margin is not None else "N/A",
+                "gross_profit_monthly": round(avg_monthly_revenue - avg_monthly_job_costs, 2) if total_revenue is not None else None
             },
 
             "break_even": {
                 "current_margin": {
-                    "margin": round(gross_margin, 4),
-                    "monthly": round(actual_break_even, 2),
-                    "annual": round(actual_break_even * 12, 2)
+                    "margin": round(gross_margin, 4) if gross_margin is not None else None,
+                    "monthly": round(actual_break_even, 2) if actual_break_even is not None else None,
+                    "annual": round(actual_break_even * 12, 2) if actual_break_even is not None else None
                 },
                 "scenarios": break_even_scenarios
+            },
+
+            # Include actual P&L data from QBO report
+            "actual_pnl": {
+                "income": total_revenue,
+                "cogs": actual_cogs,
+                "gross_profit": actual_gross_profit,
+                "expenses": actual_expenses,
+                "net_income": actual_net_income
             },
 
             "mixed_expenses": {

@@ -45,10 +45,11 @@ class APService:
             as_of_date = date.today()
 
         # Query transactions for bills that are pending (not paid/voided)
+        # Use qbo_type column to match synced QB data
         result = self.supabase.table("transactions")\
             .select("id, transaction_date, total_amount, memo, reference_number, vendor_id, status, metadata, qbo_id")\
             .eq("tenant_id", self.tenant_id)\
-            .in_("transaction_type", ["bill", "expense"])\
+            .in_("qbo_type", ["Bill", "Expense"])\
             .eq("status", "pending")\
             .neq("status", "voided")\
             .order("transaction_date")\
@@ -315,11 +316,12 @@ class APService:
         vendors = self.get_vendor_summary(as_of_date)
 
         # Get average days to pay (from paid bills in last 90 days)
+        # Use qbo_type column to match synced QB data
         paid_start = (as_of_date - timedelta(days=90)).isoformat()
         paid_bills = self.supabase.table("transactions")\
             .select("transaction_date, metadata")\
             .eq("tenant_id", self.tenant_id)\
-            .in_("transaction_type", ["bill", "expense"])\
+            .in_("qbo_type", ["Bill", "Expense"])\
             .eq("status", "posted")\
             .gte("transaction_date", paid_start)\
             .execute()

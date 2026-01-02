@@ -37,7 +37,7 @@ interface Job {
   status: string
 }
 
-// Demo data for Apex Roofing Solutions ($3.5M roofing contractor)
+// Demo data for Apex Roofing Solutions ($3.5M roofing contractor) - ONLY used in demo mode
 const DEMO_DATA = {
   cash: {
     total_cash: 187500,
@@ -76,41 +76,28 @@ const DEMO_DATA = {
   },
 }
 
-// Mock data for regular users without QB connected
-const MOCK_DATA = {
+// Empty/zero data for real users - shows actual QB values (which may be $0)
+const EMPTY_DATA = {
   cash: {
-    total_cash: 127450,
-    runway_weeks: 12,
-    change_wow: 0.08,
+    total_cash: 0,
+    runway_weeks: 0,
+    change_wow: 0,
   },
   revenue: {
-    mtd: 87500,
-    target: 100000,
-    progress: 0.875,
+    mtd: 0,
+    target: 0,
+    progress: 0,
   },
   arAging: {
-    current: 45000,
-    '1-30': 28000,
-    '31-60': 12000,
-    '61-90': 5000,
-    '90+': 2500,
+    current: 0,
+    '1-30': 0,
+    '31-60': 0,
+    '61-90': 0,
+    '90+': 0,
   },
-  forecast: Array.from({ length: 13 }, (_, i) => ({
-    week_start_date: new Date(Date.now() + i * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    ending_cash: 127450 + (i * 5000) - (i % 3 === 0 ? 15000 : 0),
-    optimistic_cash: 127450 + (i * 8000),
-    pessimistic_cash: 127450 + (i * 2000) - (i % 2 === 0 ? 10000 : 0),
-  })),
-  jobs: [
-    { name: 'Smith Residence', revenue: 18000, margin: 0.33, status: 'in_progress' },
-    { name: 'Johnson Commercial', revenue: 45000, margin: 0.38, status: 'in_progress' },
-    { name: 'Williams Repair', revenue: 8500, margin: 0.18, status: 'completed' },
-    { name: 'Davis Reroof', revenue: 22000, margin: 0.28, status: 'scheduled' },
-  ],
-  backlog: {
-    amount: 350000,
-    jobs: 8,
-  },
+  forecast: [] as ForecastWeek[],
+  jobs: [] as Job[],
+  backlog: null as { amount: number; jobs: number } | null, // null = N/A
 }
 
 interface OwnerDashboardProps {
@@ -118,13 +105,15 @@ interface OwnerDashboardProps {
 }
 
 export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
-  const [cash, setCash] = useState<CashPosition>(MOCK_DATA.cash)
-  const [revenue, setRevenue] = useState<Revenue>(MOCK_DATA.revenue)
-  const [arAging, setArAging] = useState<ARBucket>(MOCK_DATA.arAging)
-  const [forecast, setForecast] = useState<ForecastWeek[]>(MOCK_DATA.forecast)
-  const [jobs, setJobs] = useState<Job[]>(MOCK_DATA.jobs)
+  // Initialize with empty data for real users, demo data only when isDemoMode
+  const [cash, setCash] = useState<CashPosition>(isDemoMode ? DEMO_DATA.cash : EMPTY_DATA.cash)
+  const [revenue, setRevenue] = useState<Revenue>(isDemoMode ? DEMO_DATA.revenue : EMPTY_DATA.revenue)
+  const [arAging, setArAging] = useState<ARBucket>(isDemoMode ? DEMO_DATA.arAging : EMPTY_DATA.arAging)
+  const [forecast, setForecast] = useState<ForecastWeek[]>(isDemoMode ? DEMO_DATA.forecast : EMPTY_DATA.forecast)
+  const [jobs, setJobs] = useState<Job[]>(isDemoMode ? DEMO_DATA.jobs : EMPTY_DATA.jobs)
+  const [backlog, setBacklog] = useState<{ amount: number; jobs: number } | null>(isDemoMode ? DEMO_DATA.backlog : null)
   const [loading, setLoading] = useState(true)
-  const [hasRealData, setHasRealData] = useState(false) // Track if showing real vs mock data
+  const [hasRealData, setHasRealData] = useState(isDemoMode) // Demo mode counts as having data
 
   useEffect(() => {
     void fetchDashboardData()
@@ -154,27 +143,41 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
         return
       }
 
-      // Compute metrics from synced transactions
+      // === FETCH ACTUAL QB BALANCES FROM API (NOT computed from transactions) ===
+      // This ensures we show REAL QuickBooks values, not stale synced data
       const now = new Date()
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
       const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-      // Fetch deposits (cash inflows) - using qbo_type column
-      const { data: deposits, error: depositsErr } = await supabase
-        .from('transactions')
-        .select('total_amount, transaction_date')
-        .eq('tenant_id', tenantId)
-        .eq('qbo_type', 'Deposit')
-        .gte('transaction_date', last30Days)
+      // Try to get ACTUAL balances from QuickBooks API
+      let actualCash = 0
+      let actualAR = 0
+      let hasQBConnection = false
 
-      // Fetch invoices for revenue and AR - using qbo_type column
+      try {
+        const balancesResponse = await fetch(`/api/qbo/balances?tenant_id=${tenantId}`)
+        const balancesData = await balancesResponse.json()
+
+        if (balancesData.success) {
+          actualCash = balancesData.cash_balance || 0
+          actualAR = balancesData.ar_balance || 0
+          hasQBConnection = true
+          console.log('✅ Fetched ACTUAL QB balances:', { actualCash, actualAR })
+        } else {
+          console.log('⚠️ Could not fetch QB balances:', balancesData.error)
+        }
+      } catch (err) {
+        console.log('⚠️ QB balances API error, will fall back to transactions:', err)
+      }
+
+      // Fetch invoices for MTD revenue calculation - using qbo_type column
       const { data: invoices, error: invoicesErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date, status')
         .eq('tenant_id', tenantId)
         .eq('qbo_type', 'Invoice')
 
-      // Fetch expenses (purchases) - using qbo_type column
+      // Fetch expenses for runway calculation - using qbo_type column
       const { data: expenses, error: expensesErr } = await supabase
         .from('transactions')
         .select('total_amount, transaction_date')
@@ -183,86 +186,106 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
         .gte('transaction_date', last30Days)
 
       // Log for debugging
-      if (depositsErr || invoicesErr || expensesErr) {
-        console.error('Transaction fetch errors:', { depositsErr, invoicesErr, expensesErr })
+      if (invoicesErr || expensesErr) {
+        console.error('Transaction fetch errors:', { invoicesErr, expensesErr })
       }
       console.log('Dashboard data fetch:', {
         tenantId,
-        deposits: deposits?.length || 0,
+        hasQBConnection,
+        actualCash,
+        actualAR,
         invoices: invoices?.length || 0,
         expenses: expenses?.length || 0
       })
 
       // Check if we have real data
-      const totalTransactions = (deposits?.length || 0) + (invoices?.length || 0) + (expenses?.length || 0)
-      if (totalTransactions === 0) {
-        // No synced data yet - keep mock data
-        console.log('No transaction data found - showing sample data')
+      const totalTransactions = (invoices?.length || 0) + (expenses?.length || 0)
+      if (!hasQBConnection && totalTransactions === 0) {
+        // No data at all - show zeros, not mock data
+        console.log('No QB connection and no transaction data - showing $0 values')
+        setHasRealData(false)
+        setCash({ total_cash: 0, runway_weeks: 0, change_wow: 0 })
+        setRevenue({ mtd: 0, target: 0, progress: 0 })
+        setArAging({ current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 })
+        setForecast([])
+        setJobs([])
+        setBacklog(null)
         setLoading(false)
         return
       }
 
       setHasRealData(true)
 
-      // Calculate cash position from deposits - expenses
-      const totalDeposits = deposits?.reduce((sum, d) => sum + (d.total_amount || 0), 0) || 0
+      // === CASH: Use ACTUAL QB bank balance ===
       const totalExpenses = expenses?.reduce((sum, e) => sum + Math.abs(e.total_amount || 0), 0) || 0
-      const netCash = totalDeposits - totalExpenses
-      const weeklyBurn = totalExpenses / 4 // Rough weekly estimate
-      const runwayWeeks = weeklyBurn > 0 ? Math.round(Math.max(netCash, 50000) / weeklyBurn) : 12
+      const weeklyBurn = totalExpenses / 4
+      const runwayWeeks = weeklyBurn > 0 && actualCash > 0 ? Math.round(actualCash / weeklyBurn) : 0
 
       setCash({
-        total_cash: Math.max(netCash, 50000), // Minimum reasonable cash
-        runway_weeks: Math.min(runwayWeeks, 52),
-        change_wow: 0.05, // Would need historical data to calculate
+        total_cash: actualCash, // ACTUAL QB bank balance - NOT computed
+        runway_weeks: Math.min(Math.max(runwayWeeks, 0), 52),
+        change_wow: 0,
       })
 
       // Calculate MTD revenue from invoices this month
       const mtdInvoices = invoices?.filter(inv => inv.transaction_date >= monthStart) || []
       const mtdRevenue = mtdInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
-      const targetRevenue = mtdRevenue > 0 ? mtdRevenue * 1.1 : 100000 // 10% above or default
+      const targetRevenue = mtdRevenue > 0 ? mtdRevenue * 1.1 : 0
 
       setRevenue({
         mtd: mtdRevenue,
         target: targetRevenue,
-        progress: mtdRevenue / targetRevenue,
+        progress: targetRevenue > 0 ? mtdRevenue / targetRevenue : 0,
       })
 
-      // Calculate AR aging from unpaid invoices
-      const unpaidInvoices = invoices?.filter(inv => inv.status !== 'paid') || []
+      // === AR: Use ACTUAL QB AR balance if available ===
+      // AR aging breakdown is approximated from invoice dates, but total uses actual QB value
       const aging: ARBucket = { current: 0, '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 }
 
-      unpaidInvoices.forEach(inv => {
-        const invDate = new Date(inv.transaction_date)
-        const daysOld = Math.floor((now.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24))
-        const amount = inv.total_amount || 0
+      if (hasQBConnection && actualAR === 0) {
+        // QB says AR is $0 - all invoices are paid
+        // Don't use stale "pending" status from synced transactions
+        console.log('✅ QB confirms AR is $0 - all invoices paid')
+      } else if (hasQBConnection && actualAR > 0) {
+        // We have actual AR - distribute across buckets based on invoice dates
+        // This is an approximation since we have total AR but not per-invoice current balance
+        const unpaidInvoices = invoices?.filter(inv => inv.status === 'pending') || []
+        const totalFromInvoices = unpaidInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+        const scaleFactor = totalFromInvoices > 0 ? actualAR / totalFromInvoices : 0
 
-        if (daysOld <= 0) aging.current += amount
-        else if (daysOld <= 30) aging['1-30'] += amount
-        else if (daysOld <= 60) aging['31-60'] += amount
-        else if (daysOld <= 90) aging['61-90'] += amount
-        else aging['90+'] += amount
-      })
+        unpaidInvoices.forEach(inv => {
+          const invDate = new Date(inv.transaction_date)
+          const daysOld = Math.floor((now.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24))
+          const amount = (inv.total_amount || 0) * scaleFactor // Scale to match actual QB AR
+
+          if (daysOld <= 0) aging.current += amount
+          else if (daysOld <= 30) aging['1-30'] += amount
+          else if (daysOld <= 60) aging['31-60'] += amount
+          else if (daysOld <= 90) aging['61-90'] += amount
+          else aging['90+'] += amount
+        })
+      }
 
       setArAging(aging)
 
-      // Generate simple forecast based on current trends
-      const weeklyInflow = totalDeposits / 4
-      const weeklyOutflow = totalExpenses / 4
-      const startingCash = Math.max(netCash, 50000)
-
+      // Generate forecast using ACTUAL starting cash
       const forecastWeeks: ForecastWeek[] = Array.from({ length: 13 }, (_, i) => {
         const weekStart = new Date(now.getTime() + i * 7 * 24 * 60 * 60 * 1000)
-        const baseChange = weeklyInflow - weeklyOutflow
+        const avgWeeklyExpense = weeklyBurn
+        // Simple projection - cash stays flat if no expense data
+        const projectedChange = -avgWeeklyExpense * (i + 1)
         return {
           week_start_date: weekStart.toISOString().split('T')[0],
-          ending_cash: startingCash + (baseChange * (i + 1)),
-          optimistic_cash: startingCash + (baseChange * 1.2 * (i + 1)),
-          pessimistic_cash: startingCash + (baseChange * 0.7 * (i + 1)),
+          ending_cash: actualCash + projectedChange,
+          optimistic_cash: actualCash + (projectedChange * 0.8),
+          pessimistic_cash: actualCash + (projectedChange * 1.2),
         }
       })
 
       setForecast(forecastWeeks)
+
+      // Backlog is not available from QB
+      setBacklog(null)
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -323,7 +346,7 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
       {!hasRealData && !isDemoMode && (
         <div className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm flex items-center gap-2">
           <span className="text-amber-500">⚠️</span>
-          Showing sample data. Connect QuickBooks to see your real numbers.
+          No transaction data synced yet. Connect and sync QuickBooks to see your real numbers.
         </div>
       )}
 
@@ -383,8 +406,8 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
         />
         <MetricCard
           label="Backlog"
-          value={formatCurrency(isDemoMode ? DEMO_DATA.backlog.amount : MOCK_DATA.backlog.amount)}
-          subValue={`${isDemoMode ? DEMO_DATA.backlog.jobs : MOCK_DATA.backlog.jobs} jobs scheduled`}
+          value={backlog ? formatCurrency(backlog.amount) : 'N/A'}
+          subValue={backlog ? `${backlog.jobs} jobs scheduled` : 'Not available from QB'}
           trend="neutral"
           icon="🔧"
         />
@@ -397,29 +420,41 @@ export function OwnerDashboard({ isDemoMode = false }: OwnerDashboardProps) {
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span>📊</span> 13-Week Cash Forecast
           </h3>
-          <div className="h-64 flex items-end gap-1">
-            {forecast.map((week, i) => {
-              const maxCash = Math.max(...forecast.map(f => f.optimistic_cash))
-              const height = (week.ending_cash / maxCash) * 100
-              return (
-                <motion.div
-                  key={week.week_start_date}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${height}%` }}
-                  transition={{ delay: i * 0.05 }}
-                  className="flex-1 bg-gradient-to-t from-emerald-500/50 to-emerald-500/20 rounded-t-sm relative group"
-                >
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-xs text-white px-2 py-1 rounded whitespace-nowrap">
-                    {formatCurrency(week.ending_cash)}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </div>
-          <div className="flex justify-between text-xs text-slate-500 mt-2">
-            <span>This Week</span>
-            <span>Week 13</span>
-          </div>
+          {forecast.length > 0 ? (
+            <>
+              <div className="h-64 flex items-end gap-1">
+                {forecast.map((week, i) => {
+                  const maxCash = Math.max(...forecast.map(f => Math.max(f.optimistic_cash, 1)))
+                  const height = maxCash > 0 ? Math.max((week.ending_cash / maxCash) * 100, 0) : 0
+                  return (
+                    <motion.div
+                      key={week.week_start_date}
+                      initial={{ height: 0 }}
+                      animate={{ height: `${height}%` }}
+                      transition={{ delay: i * 0.05 }}
+                      className={`flex-1 bg-gradient-to-t ${week.ending_cash >= 0 ? 'from-emerald-500/50 to-emerald-500/20' : 'from-red-500/50 to-red-500/20'} rounded-t-sm relative group`}
+                    >
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-xs text-white px-2 py-1 rounded whitespace-nowrap">
+                        {formatCurrency(week.ending_cash)}
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </div>
+              <div className="flex justify-between text-xs text-slate-500 mt-2">
+                <span>This Week</span>
+                <span>Week 13</span>
+              </div>
+            </>
+          ) : (
+            <div className="h-64 flex items-center justify-center text-slate-500">
+              <div className="text-center">
+                <div className="text-3xl mb-2">📊</div>
+                <p>No forecast data available</p>
+                <p className="text-sm">Sync transactions to see projections</p>
+              </div>
+            </div>
+          )}
         </GlassCard>
 
         {/* AR Aging */}

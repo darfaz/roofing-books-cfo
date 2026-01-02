@@ -5,6 +5,7 @@ FastAPI application for bookkeeping automation
 import os
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -268,6 +269,63 @@ async def get_qbo_status(tenant_id: str):
         "created_at": integration.get("created_at"),
         "updated_at": integration.get("updated_at")
     }
+
+
+@app.get("/api/qbo/balances")
+async def get_qbo_balances(tenant_id: str):
+    """
+    Get actual QuickBooks balances - cash and AR directly from QB API.
+
+    IMPORTANT: This returns ACTUAL QB data, not computed from transactions.
+    - Cash: From Bank account CurrentBalance
+    - AR: Sum of all invoice Balance fields (unpaid portion)
+    - AP: Sum of all bill Balance fields (unpaid portion)
+
+    Returns:
+        cash_balance: Actual bank account balance
+        ar_balance: Sum of unpaid invoice balances
+        ap_balance: Sum of unpaid bill balances
+    """
+    from src.services.qbo.client import QBOClient
+
+    try:
+        client = QBOClient(tenant_id)
+
+        # Get actual cash balance from bank accounts
+        cash_balance = client.get_cash_accounts_balance()
+
+        # Get actual AR from invoice balances
+        invoices = client.get_invoices()
+        ar_balance = sum(inv.get("balance", 0) for inv in invoices)
+
+        # Get actual AP from bill balances
+        bills = client.get_bills()
+        ap_balance = sum(abs(bill.get("balance", 0)) for bill in bills)
+
+        return {
+            "success": True,
+            "cash_balance": round(cash_balance, 2),
+            "ar_balance": round(ar_balance, 2),
+            "ap_balance": round(ap_balance, 2),
+            "source": "quickbooks_api",
+            "timestamp": datetime.now().isoformat()
+        }
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "cash_balance": None,
+            "ar_balance": None,
+            "ap_balance": None
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to fetch QB balances: {str(e)}",
+            "cash_balance": None,
+            "ar_balance": None,
+            "ap_balance": None
+        }
 
 
 @app.get("/api/qbo/debug")
@@ -3751,6 +3809,377 @@ async def get_demo_profit_leaks():
         },
         "demo": True
     }
+
+
+# ============================================================
+# P&L ANALYTICS ENDPOINTS (Real QuickBooks Data)
+# ============================================================
+
+from src.services.finance.pnl_analytics import PnLAnalyticsService, analyze_quickbooks_pnl
+
+
+@app.get("/api/analytics/pnl")
+async def get_pnl_analytics(
+    tenant_id: str = Depends(get_current_tenant_id),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    accounting_method: Optional[str] = "Accrual"
+):
+    """
+    Get P&L analytics with break-even, EBITDA/SDE, and profit leak detection.
+
+    Uses real QuickBooks data when connected, falls back to demo data otherwise.
+    """
+    try:
+        # Check if tenant has active QBO connection
+        integration = supabase.table("tenant_integrations")\
+            .select("id, is_active")\
+            .eq("tenant_id", tenant_id)\
+            .eq("provider", "quickbooks")\
+            .eq("is_active", True)\
+            .execute()
+
+        if integration.data:
+            # Use QBO client to get real P&L
+            from src.services.qbo.client import QBOClient
+            qbo = QBOClient(tenant_id)
+
+            # Get overhead analysis which includes P&L data
+            overhead_data = qbo.get_overhead_analysis(start_date, end_date)
+
+            # Transform QBO data to P&L format
+            pnl_service = PnLAnalyticsService()
+
+            # Use ACTUAL P&L data from QBO Report - NEVER fabricate
+            actual_pnl = overhead_data.get("actual_pnl", {})
+
+            # Get values - use actual P&L data from QBO
+            revenue = actual_pnl.get("income")
+            cogs = actual_pnl.get("cogs")
+            gross_profit = actual_pnl.get("gross_profit")
+            expenses = actual_pnl.get("expenses")
+            net_income = actual_pnl.get("net_income")
+
+            # Build report structure with ACTUAL data - 0 if None for calculations
+            report_data = {
+                "start_date": overhead_data["period"]["start"],
+                "end_date": overhead_data["period"]["end"],
+                "summary": {
+                    "total_income": revenue if revenue is not None else 0,
+                    "total_cogs": cogs if cogs is not None else 0,
+                    "gross_profit": gross_profit if gross_profit is not None else 0,
+                    "total_expenses": expenses if expenses is not None else 0,
+                    "net_income": net_income if net_income is not None else 0
+                },
+                "metrics": {},
+                # Include actual P&L breakdown from QBO
+                "actual_data": actual_pnl
+            }
+
+            # Add overhead items as metrics
+            for category, amount in overhead_data["overhead"]["by_category"].items():
+                report_data["metrics"][f"Expenses.{category}"] = amount
+
+            for category, amount in overhead_data["job_costs"]["by_category"].items():
+                report_data["metrics"][f"Cost of Goods Sold.{category}"] = amount
+
+            analytics = pnl_service.analyze_pnl(report_data)
+
+            return {
+                "success": True,
+                "data": analytics,
+                "source": "quickbooks",
+                "tenant_id": tenant_id
+            }
+
+        else:
+            # Return demo data if not connected
+            return await get_demo_pnl_analytics()
+
+    except Exception as e:
+        # Fallback to demo on error
+        print(f"P&L Analytics error: {e}")
+        return await get_demo_pnl_analytics()
+
+
+@app.get("/api/analytics/pnl/demo")
+async def get_demo_pnl_analytics():
+    """
+    Demo P&L analytics for Apex Roofing Solutions.
+    """
+    pnl_service = PnLAnalyticsService()
+
+    # Demo data matching Apex Roofing profile
+    demo_report = {
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31",
+        "summary": {
+            "total_income": 3500000,
+            "total_cogs": 2275000,
+            "gross_profit": 1225000,
+            "total_expenses": 779500,
+            "net_income": 245000
+        },
+        "metrics": {
+            "Income.Roofing Services": 2450000,
+            "Income.Commercial": 875000,
+            "Income.Repairs": 175000,
+            "Cost of Goods Sold.Materials": 1225000,
+            "Cost of Goods Sold.Direct Labor": 630000,
+            "Cost of Goods Sold.Subcontractors": 280000,
+            "Cost of Goods Sold.Equipment": 70000,
+            "Cost of Goods Sold.Disposal": 70000,
+            "Expenses.Payroll Admin": 225000,
+            "Expenses.Insurance": 122500,
+            "Expenses.Rent": 70000,
+            "Expenses.Marketing": 70000,
+            "Expenses.Vehicles": 87500,
+            "Expenses.Professional Fees": 35000,
+            "Expenses.Office Software": 52500,
+            "Expenses.Utilities": 28000,
+            "Expenses.Entertainment": 12000,
+            "Expenses.Depreciation": 42000,
+            "Expenses.Other": 35000,
+            "Expenses.Interest": 0
+        }
+    }
+
+    analytics = pnl_service.analyze_pnl(demo_report)
+
+    # Add EBITDA/SDE with owner addbacks
+    ebitda_sde = pnl_service.calculate_ebitda_sde(
+        net_income=245000,
+        interest=0,
+        depreciation=42000,
+        owner_compensation=180000,  # Owner salary to add back
+        owner_benefits=25000,  # Health insurance, etc
+        non_recurring=25000  # One-time legal fees
+    )
+
+    analytics["ebitda_sde"] = ebitda_sde
+
+    return {
+        "success": True,
+        "data": analytics,
+        "source": "demo",
+        "company": "Apex Roofing Solutions"
+    }
+
+
+@app.get("/api/analytics/break-even")
+async def get_break_even_analysis(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """
+    Get break-even analysis with scenario modeling.
+    """
+    try:
+        integration = supabase.table("tenant_integrations")\
+            .select("id, is_active")\
+            .eq("tenant_id", tenant_id)\
+            .eq("provider", "quickbooks")\
+            .eq("is_active", True)\
+            .execute()
+
+        if integration.data:
+            from src.services.qbo.client import QBOClient
+            qbo = QBOClient(tenant_id)
+
+            overhead_data = qbo.get_overhead_analysis()
+
+            return {
+                "success": True,
+                "data": {
+                    "overhead": overhead_data["overhead"],
+                    "gross_margin": overhead_data["profitability"],
+                    "break_even": overhead_data["break_even"]
+                },
+                "source": "quickbooks"
+            }
+
+        else:
+            # Demo break-even
+            pnl_service = PnLAnalyticsService()
+            break_even = pnl_service.calculate_break_even(
+                total_overhead=779500,  # Annual overhead
+                gross_margin_pct=0.35  # 35% gross margin
+            )
+
+            return {
+                "success": True,
+                "data": {
+                    "overhead": {
+                        "total": 779500,
+                        "monthly_average": 64958
+                    },
+                    "gross_margin": {
+                        "current": 0.35,
+                        "target": 0.35
+                    },
+                    "break_even": break_even
+                },
+                "source": "demo"
+            }
+
+    except Exception as e:
+        raise HTTPException(500, f"Break-even analysis failed: {str(e)}")
+
+
+@app.get("/api/analytics/valuation")
+async def get_valuation_metrics(
+    tenant_id: str = Depends(get_current_tenant_id),
+    owner_compensation: float = 0,
+    owner_benefits: float = 0,
+    non_recurring: float = 0
+):
+    """
+    Get EBITDA/SDE valuation metrics with add-back adjustments.
+    """
+    try:
+        integration = supabase.table("tenant_integrations")\
+            .select("id, is_active")\
+            .eq("tenant_id", tenant_id)\
+            .eq("provider", "quickbooks")\
+            .eq("is_active", True)\
+            .execute()
+
+        pnl_service = PnLAnalyticsService()
+
+        if integration.data:
+            from src.services.qbo.client import QBOClient
+            qbo = QBOClient(tenant_id)
+
+            overhead_data = qbo.get_overhead_analysis()
+            net_income = overhead_data["revenue"]["total"] - \
+                         overhead_data["job_costs"]["total"] - \
+                         overhead_data["overhead"]["total"]
+
+            # Get interest/depreciation from expense breakdown
+            interest = 0
+            depreciation = 0
+            for category, amount in overhead_data["overhead"]["by_category"].items():
+                if "interest" in category.lower():
+                    interest += amount
+                if "depreciation" in category.lower() or "amortization" in category.lower():
+                    depreciation += amount
+
+            valuation = pnl_service.calculate_ebitda_sde(
+                net_income=net_income,
+                interest=interest,
+                depreciation=depreciation,
+                owner_compensation=owner_compensation,
+                owner_benefits=owner_benefits,
+                non_recurring=non_recurring
+            )
+
+            return {
+                "success": True,
+                "data": {
+                    "net_income": net_income,
+                    **valuation
+                },
+                "source": "quickbooks"
+            }
+
+        else:
+            # Demo valuation
+            valuation = pnl_service.calculate_ebitda_sde(
+                net_income=245000,
+                interest=0,
+                depreciation=42000,
+                owner_compensation=owner_compensation or 180000,
+                owner_benefits=owner_benefits or 25000,
+                non_recurring=non_recurring or 25000
+            )
+
+            return {
+                "success": True,
+                "data": {
+                    "net_income": 245000,
+                    **valuation
+                },
+                "source": "demo"
+            }
+
+    except Exception as e:
+        raise HTTPException(500, f"Valuation calculation failed: {str(e)}")
+
+
+@app.get("/api/analytics/profit-leaks")
+async def get_profit_leaks(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """
+    Detect profit leaks by analyzing expense ratios vs industry benchmarks.
+    """
+    try:
+        integration = supabase.table("tenant_integrations")\
+            .select("id, is_active")\
+            .eq("tenant_id", tenant_id)\
+            .eq("provider", "quickbooks")\
+            .eq("is_active", True)\
+            .execute()
+
+        pnl_service = PnLAnalyticsService()
+
+        if integration.data:
+            from src.services.qbo.client import QBOClient
+            qbo = QBOClient(tenant_id)
+
+            overhead_data = qbo.get_overhead_analysis()
+            revenue = overhead_data["revenue"]["total"]
+
+            pnl_data = {
+                "overhead_items": overhead_data["overhead"]["by_category"],
+                "cogs_items": overhead_data["job_costs"]["by_category"]
+            }
+
+            profit_leaks = pnl_service.detect_profit_leaks(pnl_data, revenue)
+
+            return {
+                "success": True,
+                "data": {
+                    "profit_leaks": profit_leaks,
+                    "total_potential_savings": sum(
+                        leak.get("potential_savings", 0)
+                        for leak in profit_leaks
+                        if leak.get("potential_savings")
+                    ),
+                    "leak_count": len(profit_leaks)
+                },
+                "source": "quickbooks"
+            }
+
+        else:
+            # Demo profit leaks
+            demo_pnl = {
+                "overhead_items": {
+                    "Payroll Admin": 225000,
+                    "Marketing": 70000,
+                    "Telephone": 49000,  # High
+                    "Vehicles": 87500,
+                    "Entertainment": 12000
+                }
+            }
+
+            profit_leaks = pnl_service.detect_profit_leaks(demo_pnl, 3500000)
+
+            return {
+                "success": True,
+                "data": {
+                    "profit_leaks": profit_leaks,
+                    "total_potential_savings": sum(
+                        leak.get("potential_savings", 0)
+                        for leak in profit_leaks
+                        if leak.get("potential_savings")
+                    ),
+                    "leak_count": len(profit_leaks)
+                },
+                "source": "demo"
+            }
+
+    except Exception as e:
+        raise HTTPException(500, f"Profit leak detection failed: {str(e)}")
 
 
 # ============================================================
