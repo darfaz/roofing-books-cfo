@@ -265,6 +265,26 @@ export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDas
         'Content-Type': 'application/json'
       }
 
+      // FIRST: Get ACTUAL balances from QuickBooks API
+      let actualCash = 0
+      let actualAR = 0
+      let actualAP = 0
+      let hasQBConnection = false
+
+      try {
+        const balancesResponse = await fetch(`/api/qbo/balances?tenant_id=${tenantId}`, { headers })
+        const balancesData = await balancesResponse.json()
+        if (balancesData.success) {
+          actualCash = balancesData.cash_balance || 0
+          actualAR = balancesData.ar_balance || 0
+          actualAP = balancesData.ap_balance || 0
+          hasQBConnection = true
+          console.log('✅ Finance: Fetched ACTUAL QB balances:', { actualCash, actualAR, actualAP })
+        }
+      } catch (err) {
+        console.log('⚠️ Finance: QB balances API error:', err)
+      }
+
       // Fetch all finance data in parallel
       const [alertRes, scenariosRes, apRes, budgetRes] = await Promise.all([
         fetch(`/api/finance/cash-forecast/alert?tenant_id=${tenantId}`, { headers }),
@@ -275,14 +295,40 @@ export function FinanceDashboard({ accessToken, isDemoMode = false }: FinanceDas
 
       if (alertRes.ok) {
         const alertData = await alertRes.json()
+        // OVERRIDE with actual QB cash balance
+        if (hasQBConnection && alertData.data) {
+          alertData.data.current_cash = actualCash
+          console.log('✅ Finance: Using ACTUAL QB cash:', actualCash)
+        }
         setCashAlert(alertData.data)
       }
       if (scenariosRes.ok) {
         const scenariosData = await scenariosRes.json()
+        // OVERRIDE AR with actual QB balance
+        if (hasQBConnection && scenariosData.data) {
+          if (scenariosData.data.base) {
+            scenariosData.data.base.ar_total = actualAR
+            scenariosData.data.base.starting_cash = actualCash
+          }
+          if (scenariosData.data.optimistic) {
+            scenariosData.data.optimistic.ar_total = actualAR
+            scenariosData.data.optimistic.starting_cash = actualCash
+          }
+          if (scenariosData.data.pessimistic) {
+            scenariosData.data.pessimistic.ar_total = actualAR
+            scenariosData.data.pessimistic.starting_cash = actualCash
+          }
+          console.log('✅ Finance: Using ACTUAL QB AR:', actualAR)
+        }
         setAllScenarios(scenariosData.data)
       }
       if (apRes.ok) {
         const apData = await apRes.json()
+        // OVERRIDE AP total with actual QB balance
+        if (hasQBConnection && apData.data) {
+          apData.data.total = actualAP
+          console.log('✅ Finance: Using ACTUAL QB AP:', actualAP)
+        }
         setAPAging(apData.data)
       }
       if (budgetRes.ok) {
