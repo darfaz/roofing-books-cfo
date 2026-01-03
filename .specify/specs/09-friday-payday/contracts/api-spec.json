@@ -1,0 +1,1043 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Friday Payday API - CrewCFO",
+    "description": "AI-powered collections automation for roofing contractors, integrated with CrewCFO platform",
+    "version": "1.0.0",
+    "contact": {
+      "name": "CrewCFO Support",
+      "email": "support@crewcfo.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.crewcfo.com/api/friday-payday",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:8000/api/friday-payday",
+      "description": "Development"
+    }
+  ],
+  "tags": [
+    {"name": "Invoices", "description": "Invoice management for collections"},
+    {"name": "Customers", "description": "Customer management"},
+    {"name": "Reminders", "description": "Reminder management"},
+    {"name": "Analytics", "description": "Collections reporting and analytics"},
+    {"name": "Sequences", "description": "Dunning sequence configuration"},
+    {"name": "Payments", "description": "Payment processing"},
+    {"name": "Webhooks", "description": "External webhook handlers"}
+  ],
+  "security": [
+    {"bearerAuth": []}
+  ],
+  "paths": {
+    "/invoices": {
+      "get": {
+        "tags": ["Invoices"],
+        "summary": "List invoices",
+        "description": "Get paginated list of invoices with optional filters",
+        "operationId": "listInvoices",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["draft", "sent", "partial", "paid", "overdue", "disputed", "written_off"]
+            }
+          },
+          {
+            "name": "payer_type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["homeowner_direct", "insurance_pending", "supplement_pending", "depreciation_recovery", "gc_commercial", "retainage"]
+            }
+          },
+          {
+            "name": "aging_bucket",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["current", "1-30", "31-60", "61-90", "90+"]
+            }
+          },
+          {
+            "name": "due_date_from",
+            "in": "query",
+            "schema": {"type": "string", "format": "date"}
+          },
+          {
+            "name": "due_date_to",
+            "in": "query",
+            "schema": {"type": "string", "format": "date"}
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {"type": "string"},
+            "description": "Search by invoice number, customer name, or amount"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1}
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {"type": "integer", "default": 20, "maximum": 100}
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {"type": "string", "default": "-due_date"},
+            "description": "Sort field (prefix with - for descending)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invoices/{id}": {
+      "get": {
+        "tags": ["Invoices"],
+        "summary": "Get invoice details",
+        "operationId": "getInvoice",
+        "parameters": [
+          {"$ref": "#/components/parameters/invoiceId"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/InvoiceDetail"}
+              }
+            }
+          },
+          "404": {"description": "Invoice not found"}
+        }
+      },
+      "patch": {
+        "tags": ["Invoices"],
+        "summary": "Update invoice",
+        "operationId": "updateInvoice",
+        "parameters": [
+          {"$ref": "#/components/parameters/invoiceId"}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/InvoiceUpdate"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Invoice"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invoices/{id}/remind": {
+      "post": {
+        "tags": ["Invoices"],
+        "summary": "Send reminder immediately",
+        "operationId": "sendReminder",
+        "parameters": [
+          {"$ref": "#/components/parameters/invoiceId"}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": ["email", "sms", "both"]
+                  },
+                  "template_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reminder sent",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Reminder"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invoices/{id}/pause": {
+      "post": {
+        "tags": ["Invoices"],
+        "summary": "Pause dunning sequence",
+        "operationId": "pauseSequence",
+        "parameters": [
+          {"$ref": "#/components/parameters/invoiceId"}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reason"],
+                "properties": {
+                  "reason": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Sequence paused"}
+        }
+      }
+    },
+    "/invoices/{id}/resume": {
+      "post": {
+        "tags": ["Invoices"],
+        "summary": "Resume dunning sequence",
+        "operationId": "resumeSequence",
+        "parameters": [
+          {"$ref": "#/components/parameters/invoiceId"}
+        ],
+        "responses": {
+          "200": {"description": "Sequence resumed"}
+        }
+      }
+    },
+    "/customers": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "List customers",
+        "operationId": "listCustomers",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["homeowner", "insurance_company", "gc", "commercial"]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "has_outstanding",
+            "in": "query",
+            "schema": {"type": "boolean"},
+            "description": "Filter to customers with outstanding invoices"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1}
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {"type": "integer", "default": 20}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/CustomerListResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}": {
+      "get": {
+        "tags": ["Customers"],
+        "summary": "Get customer details",
+        "operationId": "getCustomer",
+        "parameters": [
+          {"$ref": "#/components/parameters/customerId"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/CustomerDetail"}
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Customers"],
+        "summary": "Update customer",
+        "operationId": "updateCustomer",
+        "parameters": [
+          {"$ref": "#/components/parameters/customerId"}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CustomerUpdate"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Customer"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}/suppress": {
+      "post": {
+        "tags": ["Customers"],
+        "summary": "Suppress all communications",
+        "operationId": "suppressCustomer",
+        "parameters": [
+          {"$ref": "#/components/parameters/customerId"}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Customer suppressed"}
+        }
+      }
+    },
+    "/analytics/aging": {
+      "get": {
+        "tags": ["Analytics"],
+        "summary": "Get AR aging summary",
+        "description": "Returns AR aging buckets for Owner Dashboard integration",
+        "operationId": "getAgingSummary",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/AgingSummary"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/dso": {
+      "get": {
+        "tags": ["Analytics"],
+        "summary": "Get DSO metrics",
+        "description": "Days Sales Outstanding with trend and industry comparison",
+        "operationId": "getDSOMetrics",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["30d", "60d", "90d", "12m"],
+              "default": "90d"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/DSOMetrics"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/analytics/collected": {
+      "get": {
+        "tags": ["Analytics"],
+        "summary": "Get cash collected",
+        "description": "Cash collected for Friday summary email",
+        "operationId": "getCashCollected",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["7d", "30d", "90d", "12m"],
+              "default": "7d"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/CashCollected"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sequences": {
+      "get": {
+        "tags": ["Sequences"],
+        "summary": "List dunning sequences",
+        "operationId": "listSequences",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Sequence"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Sequences"],
+        "summary": "Create custom sequence",
+        "operationId": "createSequence",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/SequenceCreate"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sequence created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Sequence"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sequences/{id}": {
+      "get": {
+        "tags": ["Sequences"],
+        "summary": "Get sequence details",
+        "operationId": "getSequence",
+        "parameters": [
+          {"$ref": "#/components/parameters/sequenceId"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Sequence"}
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Sequences"],
+        "summary": "Update sequence",
+        "operationId": "updateSequence",
+        "parameters": [
+          {"$ref": "#/components/parameters/sequenceId"}
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/SequenceUpdate"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          }
+        }
+      }
+    },
+    "/templates": {
+      "get": {
+        "tags": ["Sequences"],
+        "summary": "List message templates",
+        "operationId": "listTemplates",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["email", "sms"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Template"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Sequences"],
+        "summary": "Create template",
+        "operationId": "createTemplate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/TemplateCreate"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Template created"
+          }
+        }
+      }
+    },
+    "/reminders/queue": {
+      "post": {
+        "tags": ["Reminders"],
+        "summary": "Queue reminders for sending",
+        "description": "Called by n8n daily-aging-check workflow",
+        "operationId": "queueReminders",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "invoice_ids": {
+                    "type": "array",
+                    "items": {"type": "string", "format": "uuid"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {"description": "Reminders queued"}
+        }
+      }
+    },
+    "/payments/portal/{token}": {
+      "get": {
+        "tags": ["Payments"],
+        "summary": "Get payment portal data",
+        "description": "Public endpoint for payment portal - no auth required",
+        "operationId": "getPaymentPortal",
+        "security": [],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PaymentPortalData"}
+              }
+            }
+          },
+          "404": {"description": "Invalid or expired token"}
+        }
+      }
+    },
+    "/webhooks/stripe": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Stripe webhook handler",
+        "description": "Handles payment.succeeded, payment.failed events",
+        "operationId": "stripeWebhook",
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"type": "object"}
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Webhook processed"}
+        }
+      }
+    },
+    "/webhooks/twilio": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Twilio webhook handler",
+        "description": "Handles SMS delivery status updates",
+        "operationId": "twilioWebhook",
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {"type": "object"}
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Webhook processed"}
+        }
+      }
+    },
+    "/webhooks/sendgrid": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "SendGrid webhook handler",
+        "description": "Handles email delivery/bounce events",
+        "operationId": "sendgridWebhook",
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {"type": "object"}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {"description": "Webhook processed"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase Auth JWT token"
+      }
+    },
+    "parameters": {
+      "invoiceId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"},
+        "description": "Invoice ID (fp_invoices.id)"
+      },
+      "customerId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"},
+        "description": "Customer ID (fp_customers.id)"
+      },
+      "sequenceId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {"type": "string", "format": "uuid"},
+        "description": "Sequence ID (fp_sequences.id)"
+      }
+    },
+    "schemas": {
+      "Invoice": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "invoice_number": {"type": "string"},
+          "customer_id": {"type": "string", "format": "uuid"},
+          "customer_name": {"type": "string"},
+          "total_amount": {"type": "number"},
+          "balance": {"type": "number"},
+          "invoice_date": {"type": "string", "format": "date"},
+          "due_date": {"type": "string", "format": "date"},
+          "status": {"type": "string", "enum": ["draft", "sent", "partial", "paid", "overdue", "disputed", "written_off"]},
+          "payer_type": {"type": "string", "enum": ["homeowner_direct", "insurance_pending", "supplement_pending", "depreciation_recovery", "gc_commercial", "retainage"]},
+          "sequence_status": {"type": "string", "enum": ["pending", "active", "paused", "completed", "stopped"]},
+          "days_overdue": {"type": "integer"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "InvoiceDetail": {
+        "allOf": [
+          {"$ref": "#/components/schemas/Invoice"},
+          {
+            "type": "object",
+            "properties": {
+              "customer": {"$ref": "#/components/schemas/Customer"},
+              "communications": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Communication"}
+              },
+              "payments": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Payment"}
+              },
+              "memo": {"type": "string"},
+              "job_name": {"type": "string"},
+              "property_address": {"type": "string"},
+              "insurance_claim_number": {"type": "string"},
+              "insurance_adjuster_name": {"type": "string"},
+              "sequence_id": {"type": "string", "format": "uuid"},
+              "sequence_current_step": {"type": "integer"},
+              "sequence_next_action_at": {"type": "string", "format": "date-time"},
+              "payment_link": {"type": "string", "format": "uri"}
+            }
+          }
+        ]
+      },
+      "InvoiceUpdate": {
+        "type": "object",
+        "properties": {
+          "payer_type": {"type": "string"},
+          "sequence_id": {"type": "string", "format": "uuid"},
+          "insurance_claim_number": {"type": "string"},
+          "insurance_adjuster_name": {"type": "string"},
+          "insurance_adjuster_email": {"type": "string"},
+          "notes": {"type": "string"}
+        }
+      },
+      "InvoiceListResponse": {
+        "type": "object",
+        "properties": {
+          "invoices": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Invoice"}
+          },
+          "total": {"type": "integer"},
+          "page": {"type": "integer"},
+          "limit": {"type": "integer"},
+          "total_pages": {"type": "integer"}
+        }
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "qbo_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "email": {"type": "string"},
+          "phone": {"type": "string"},
+          "mobile": {"type": "string"},
+          "customer_type": {"type": "string", "enum": ["homeowner", "insurance_company", "gc", "commercial"]},
+          "total_outstanding": {"type": "number"},
+          "is_suppressed": {"type": "boolean"}
+        }
+      },
+      "CustomerDetail": {
+        "allOf": [
+          {"$ref": "#/components/schemas/Customer"},
+          {
+            "type": "object",
+            "properties": {
+              "invoices": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/Invoice"}
+              },
+              "lifetime_value": {"type": "number"},
+              "avg_payment_days": {"type": "integer"},
+              "email_opt_in": {"type": "boolean"},
+              "sms_opt_in": {"type": "boolean"},
+              "preferred_contact_method": {"type": "string"}
+            }
+          }
+        ]
+      },
+      "CustomerUpdate": {
+        "type": "object",
+        "properties": {
+          "email": {"type": "string"},
+          "phone": {"type": "string"},
+          "mobile": {"type": "string"},
+          "customer_type": {"type": "string"},
+          "email_opt_in": {"type": "boolean"},
+          "sms_opt_in": {"type": "boolean"},
+          "preferred_contact_method": {"type": "string"}
+        }
+      },
+      "CustomerListResponse": {
+        "type": "object",
+        "properties": {
+          "customers": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Customer"}
+          },
+          "total": {"type": "integer"},
+          "page": {"type": "integer"},
+          "limit": {"type": "integer"}
+        }
+      },
+      "Reminder": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "invoice_id": {"type": "string", "format": "uuid"},
+          "sequence_step_id": {"type": "string", "format": "uuid"},
+          "channel": {"type": "string", "enum": ["email", "sms"]},
+          "status": {"type": "string", "enum": ["scheduled", "sending", "sent", "delivered", "failed", "bounced"]},
+          "scheduled_for": {"type": "string", "format": "date-time"},
+          "sent_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Communication": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "channel": {"type": "string", "enum": ["email", "sms"]},
+          "direction": {"type": "string", "enum": ["outbound", "inbound"]},
+          "subject": {"type": "string"},
+          "body_preview": {"type": "string"},
+          "status": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "amount": {"type": "number"},
+          "payment_date": {"type": "string", "format": "date"},
+          "payment_method": {"type": "string", "enum": ["credit_card", "debit_card", "ach", "check", "cash", "other"]},
+          "source": {"type": "string", "enum": ["portal", "quickbooks", "manual"]},
+          "stripe_payment_id": {"type": "string"}
+        }
+      },
+      "Sequence": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "name": {"type": "string"},
+          "payer_type": {"type": "string"},
+          "is_default": {"type": "boolean"},
+          "is_active": {"type": "boolean"},
+          "steps": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/SequenceStep"}
+          }
+        }
+      },
+      "SequenceStep": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "step_order": {"type": "integer"},
+          "days_from_due": {"type": "integer", "description": "Negative = before due, positive = after due"},
+          "channel": {"type": "string", "enum": ["email", "sms", "both"]},
+          "template_id": {"type": "string", "format": "uuid"}
+        }
+      },
+      "SequenceCreate": {
+        "type": "object",
+        "required": ["name", "payer_type", "steps"],
+        "properties": {
+          "name": {"type": "string"},
+          "payer_type": {"type": "string"},
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["days_from_due", "channel", "template_id"],
+              "properties": {
+                "days_from_due": {"type": "integer"},
+                "channel": {"type": "string"},
+                "template_id": {"type": "string", "format": "uuid"}
+              }
+            }
+          }
+        }
+      },
+      "SequenceUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "is_active": {"type": "boolean"},
+          "steps": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/SequenceStep"}
+          }
+        }
+      },
+      "Template": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "tenant_id": {"type": "string", "format": "uuid"},
+          "name": {"type": "string"},
+          "channel": {"type": "string", "enum": ["email", "sms"]},
+          "subject": {"type": "string"},
+          "body": {"type": "string"},
+          "is_default": {"type": "boolean"}
+        }
+      },
+      "TemplateCreate": {
+        "type": "object",
+        "required": ["name", "channel", "body"],
+        "properties": {
+          "name": {"type": "string"},
+          "channel": {"type": "string"},
+          "subject": {"type": "string"},
+          "body": {"type": "string"}
+        }
+      },
+      "AgingSummary": {
+        "type": "object",
+        "description": "AR aging buckets for Owner Dashboard integration",
+        "properties": {
+          "current": {"$ref": "#/components/schemas/AgingBucket"},
+          "days_1_30": {"$ref": "#/components/schemas/AgingBucket"},
+          "days_31_60": {"$ref": "#/components/schemas/AgingBucket"},
+          "days_61_90": {"$ref": "#/components/schemas/AgingBucket"},
+          "days_90_plus": {"$ref": "#/components/schemas/AgingBucket"},
+          "total": {"$ref": "#/components/schemas/AgingBucket"}
+        }
+      },
+      "AgingBucket": {
+        "type": "object",
+        "properties": {
+          "amount": {"type": "number"},
+          "count": {"type": "integer"},
+          "percentage": {"type": "number"}
+        }
+      },
+      "DSOMetrics": {
+        "type": "object",
+        "properties": {
+          "current_dso": {"type": "number"},
+          "industry_benchmark": {"type": "number", "default": 83},
+          "trend": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {"type": "string", "format": "date"},
+                "dso": {"type": "number"}
+              }
+            }
+          },
+          "change_vs_last_month": {"type": "number"}
+        }
+      },
+      "CashCollected": {
+        "type": "object",
+        "description": "Weekly cash collection for Friday summary",
+        "properties": {
+          "period": {"type": "string"},
+          "total": {"type": "number"},
+          "invoice_count": {"type": "integer"},
+          "comparison": {
+            "type": "object",
+            "properties": {
+              "previous_total": {"type": "number"},
+              "change_amount": {"type": "number"},
+              "change_percent": {"type": "number"}
+            }
+          },
+          "top_payments": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "properties": {
+                "invoice_number": {"type": "string"},
+                "customer_name": {"type": "string"},
+                "job_name": {"type": "string"},
+                "amount": {"type": "number"}
+              }
+            }
+          },
+          "outstanding_total": {"type": "number"},
+          "outstanding_count": {"type": "integer"}
+        }
+      },
+      "PaymentPortalData": {
+        "type": "object",
+        "description": "Data for public payment portal page",
+        "properties": {
+          "company_name": {"type": "string"},
+          "company_logo_url": {"type": "string"},
+          "brand_color": {"type": "string"},
+          "invoice_number": {"type": "string"},
+          "total_amount": {"type": "number"},
+          "balance": {"type": "number"},
+          "customer_name": {"type": "string"},
+          "property_address": {"type": "string"},
+          "job_name": {"type": "string"},
+          "stripe_publishable_key": {"type": "string"},
+          "payment_intent_client_secret": {"type": "string"},
+          "accepted_payment_methods": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

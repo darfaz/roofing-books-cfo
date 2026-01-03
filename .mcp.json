@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "quickbooks": {
+      "type": "stdio",
+      "command": "/Users/ildar/.nvm/versions/node/v22.14.0/bin/node",
+      "args": [
+        "/Users/ildar/Documents/1.Projects/roofing-books-cfo/mcp-servers/qbo-mcp/dist/index.js"
+      ],
+      "cwd": "/Users/ildar/Documents/1.Projects/roofing-books-cfo/mcp-servers/qbo-mcp",
+      "env": {
+        "QBO_CLIENT_ID": "ABOlB9AikCvg1voTQwpBaqPeVh59Z7F6EaJQ747CxnACLiAhnJ",
+        "QBO_CLIENT_SECRET": "jE9SzMn7w5QORhGDRGvdP9VMfTVwjPArOS6D0hHL",
+        "QBO_ENVIRONMENT": "production",
+        "SUPABASE_URL": "https://xekgwmvakxxanwnsdnhx.supabase.co",
+        "SUPABASE_SERVICE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhla2d3bXZha3h4YW53bnNkbmh4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTQ5ODY0MCwiZXhwIjoyMDgxMDc0NjQwfQ.SDkqbTmMpL7DCsjFmSPV678WD9pMwWUAjw4c9JaVh3E",
+        "QUICKBOOKS_TENANT_ID": "9aefbb9c-3d1a-41ee-9b40-e1d65ac56056"
+      }
+    }
+  }
+}

@@ -85,12 +85,23 @@ interface ProfitLeakReportProps {
   isDemoMode?: boolean
 }
 
+interface ProfitLeak {
+  category: string
+  issue: string
+  current_ratio: number
+  benchmark: number
+  impact: string
+  severity: 'high' | 'medium' | 'low'
+  recommendation: string
+}
+
 export function ProfitLeakReport({ accessToken, isDemoMode = false }: ProfitLeakReportProps) {
   const [analysis, setAnalysis] = useState<OverheadAnalysis | null>(null)
+  const [profitLeaks, setProfitLeaks] = useState<ProfitLeak[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['summary', 'overhead']))
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['summary', 'overhead', 'leaks']))
 
   const fetchAnalysis = useCallback(async () => {
     try {
@@ -168,6 +179,28 @@ export function ProfitLeakReport({ accessToken, isDemoMode = false }: ProfitLeak
           },
         }
         setAnalysis(demoAnalysis)
+
+        // Demo profit leaks data
+        setProfitLeaks([
+          {
+            category: 'Gross Margin',
+            issue: 'Gross margin is below the healthy threshold for roofing contractors',
+            current_ratio: 0.22,
+            benchmark: 0.35,
+            impact: '13% below target',
+            severity: 'high' as const,
+            recommendation: 'Review pricing strategy and job costing. Consider increasing markup on materials and labor.',
+          },
+          {
+            category: 'Marketing Spend',
+            issue: 'Marketing costs are slightly elevated compared to industry average',
+            current_ratio: 0.017,
+            benchmark: 0.05,
+            impact: 'Within acceptable range',
+            severity: 'low' as const,
+            recommendation: 'Monitor ROI on marketing channels. Focus on highest-converting lead sources.',
+          },
+        ])
         return
       }
 
@@ -180,13 +213,77 @@ export function ProfitLeakReport({ accessToken, isDemoMode = false }: ProfitLeak
         return
       }
 
-      const response = await fetch(`/api/qbo/overhead/summary?tenant_id=${tid}`, {
+      // Try the new P&L analytics endpoint first, fallback to overhead summary
+      let response = await fetch(`/api/analytics/pnl?tenant_id=${tid}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       })
 
-      const result = await response.json()
+      let result = await response.json()
+
+      // If new endpoint succeeded, transform to OverheadAnalysis format
+      if (response.ok && result.success && result.data) {
+        const pnlData = result.data
+        const analysis: OverheadAnalysis = {
+          period: {
+            start: pnlData.period?.start || '2024-01-01',
+            end: pnlData.period?.end || '2024-12-31',
+            months: 12,
+          },
+          overhead: {
+            total: pnlData.expense_breakdown?.overhead?.total || 0,
+            monthly_average: pnlData.monthly?.overhead || 0,
+            by_category: pnlData.expense_breakdown?.overhead?.items || {},
+            monthly_trend: {},
+            transaction_count: 0,
+          },
+          job_costs: {
+            total: pnlData.summary?.total_cogs || 0,
+            monthly_average: (pnlData.summary?.total_cogs || 0) / 12,
+            by_category: pnlData.expense_breakdown?.cogs?.items || {},
+            transaction_count: 0,
+          },
+          revenue: {
+            total: pnlData.summary?.total_revenue || 0,
+            monthly_average: pnlData.monthly?.revenue || 0,
+          },
+          profitability: {
+            gross_margin: (pnlData.summary?.gross_margin_pct || 0) / 100,
+            gross_margin_pct: `${pnlData.summary?.gross_margin_pct || 0}%`,
+            gross_profit_monthly: pnlData.monthly?.net_income || 0,
+          },
+          break_even: pnlData.break_even || {
+            current_margin: { margin: 0, monthly: 0, annual: 0 },
+            scenarios: {},
+          },
+          mixed_expenses: {
+            total: 0,
+            count: 0,
+            note: '',
+          },
+          confidence: {
+            overhead_avg: 0.9,
+            job_cost_avg: 0.9,
+          },
+        }
+        setAnalysis(analysis)
+
+        // Also fetch profit leaks if available
+        if (pnlData.profit_leaks) {
+          setProfitLeaks(pnlData.profit_leaks)
+        }
+        return
+      }
+
+      // Fallback to old overhead summary endpoint
+      response = await fetch(`/api/qbo/overhead/summary?tenant_id=${tid}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+
+      result = await response.json()
 
       if (!response.ok) {
         throw new Error(result.detail || result.error?.message || 'Failed to fetch analysis')
@@ -621,6 +718,85 @@ export function ProfitLeakReport({ accessToken, isDemoMode = false }: ProfitLeak
                       could be misclassified - review for accuracy
                     </div>
                   </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </GlassCard>
+      )}
+
+      {/* Profit Leaks - Detected Issues */}
+      {profitLeaks.length > 0 && (
+        <GlassCard padding="md" variant="danger">
+          <div
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => toggleSection('leaks')}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🚨</span>
+              <div>
+                <h3 className="font-semibold text-red-400">Profit Leaks Detected</h3>
+                <p className="text-sm text-slate-400">
+                  {profitLeaks.length} issue{profitLeaks.length !== 1 ? 's' : ''} found compared to industry benchmarks
+                </p>
+              </div>
+            </div>
+            <motion.span
+              animate={{ rotate: expandedSections.has('leaks') ? 180 : 0 }}
+              className="text-slate-400"
+            >
+              ▼
+            </motion.span>
+          </div>
+
+          <AnimatePresence>
+            {expandedSections.has('leaks') && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-4 pt-4 border-t border-red-500/30 space-y-3">
+                  {profitLeaks.map((leak, index) => {
+                    const severityColors = {
+                      high: 'bg-red-500/20 border-red-500/50 text-red-300',
+                      medium: 'bg-amber-500/20 border-amber-500/50 text-amber-300',
+                      low: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300',
+                    }
+                    const severityIcons = {
+                      high: '🔴',
+                      medium: '🟡',
+                      low: '🟢',
+                    }
+                    return (
+                      <div
+                        key={index}
+                        className={`p-4 rounded-lg border ${severityColors[leak.severity]}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="text-lg">{severityIcons[leak.severity]}</span>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-semibold">{leak.category}</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-slate-800/50 text-slate-400 uppercase">
+                                {leak.severity}
+                              </span>
+                            </div>
+                            <p className="text-sm mb-2">{leak.issue}</p>
+                            <div className="flex gap-4 text-xs text-slate-400 mb-2">
+                              <span>Current: {(leak.current_ratio * 100).toFixed(1)}%</span>
+                              <span>Benchmark: {(leak.benchmark * 100).toFixed(1)}%</span>
+                              <span className="text-red-400 font-medium">{leak.impact}</span>
+                            </div>
+                            <p className="text-xs text-slate-300 bg-slate-800/50 rounded p-2">
+                              💡 {leak.recommendation}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </motion.div>
             )}

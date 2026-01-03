@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stop the Profit Leaks - Roofing Pricing Guide</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-purple: #7C3AED;
+            --dark-bg: #0F0F1A;
+            --darker-bg: #080810;
+            --card-bg: #1A1A2E;
+            --text-white: #FFFFFF;
+            --text-gray: #A0A0B0;
+            --accent-green: #10B981;
+            --accent-red: #EF4444;
+            --accent-yellow: #F59E0B;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-white);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Cover Page */
+        .cover {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 60px 24px;
+            background: linear-gradient(180deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
+        }
+
+        .cover-badge {
+            background: var(--primary-purple);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 30px;
+        }
+
+        .cover h1 {
+            font-size: clamp(48px, 8vw, 80px);
+            font-weight: 900;
+            line-height: 1.0;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+
+        .cover h1 .highlight {
+            color: var(--primary-purple);
+        }
+
+        .cover-subtitle {
+            font-size: 24px;
+            color: var(--text-gray);
+            margin-bottom: 40px;
+            max-width: 600px;
+        }
+
+        .cover-icon {
+            width: 200px;
+            height: 200px;
+            margin: 40px 0;
+        }
+
+        .cover-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .cover-tagline {
+            font-size: 18px;
+            color: var(--text-gray);
+            margin-top: 40px;
+        }
+
+        .cover-brand {
+            margin-top: 30px;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 2px;
+        }
+
+        /* Section Styles */
+        .section {
+            padding: 80px 0;
+            border-bottom: 1px solid rgba(124, 58, 237, 0.2);
+        }
+
+        .section-header {
+            background: var(--primary-purple);
+            padding: 60px 24px;
+            text-align: center;
+        }
+
+        .section-header h2 {
+            font-size: clamp(36px, 6vw, 56px);
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .section-header h2 .highlight {
+            color: var(--darker-bg);
+        }
+
+        h2 {
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 900;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+
+        h3 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--primary-purple);
+        }
+
+        p {
+            font-size: 18px;
+            color: var(--text-gray);
+            margin-bottom: 20px;
+        }
+
+        /* You Are Here Section */
+        .you-are-here {
+            text-align: center;
+            padding: 80px 24px;
+            background: var(--darker-bg);
+        }
+
+        .you-are-here h2 {
+            margin-bottom: 50px;
+        }
+
+        .stage-indicator {
+            display: inline-block;
+            background: var(--primary-purple);
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 40px;
+        }
+
+        /* Problem Cards */
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 40px;
+        }
+
+        .problem-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px;
+            border-left: 4px solid var(--accent-red);
+        }
+
+        .problem-card h4 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text-white);
+        }
+
+        .problem-card p {
+            font-size: 16px;
+            margin-bottom: 0;
+        }
+
+        /* Football Analogy */
+        .football-section {
+            background: var(--darker-bg);
+            padding: 80px 24px;
+            text-align: center;
+        }
+
+        .football-stats {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 40px;
+            margin: 50px 0;
+            flex-wrap: wrap;
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 72px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .stat-number.green { color: var(--accent-green); }
+        .stat-number.red { color: var(--accent-red); }
+        .stat-number.purple { color: var(--primary-purple); }
+
+        .stat-label {
+            font-size: 18px;
+            color: var(--text-gray);
+            margin-top: 10px;
+        }
+
+        .stat-divider {
+            font-size: 48px;
+            color: var(--text-gray);
+        }
+
+        .football-message {
+            max-width: 700px;
+            margin: 0 auto;
+            font-size: 22px;
+            color: var(--text-white);
+            line-height: 1.7;
+        }
+
+        /* 5 Turnovers Table */
+        .turnovers-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 40px;
+        }
+
+        .turnovers-table th {
+            background: var(--primary-purple);
+            padding: 20px;
+            text-align: left;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .turnovers-table td {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            vertical-align: top;
+        }
+
+        .turnovers-table tr:nth-child(even) {
+            background: rgba(124, 58, 237, 0.05);
+        }
+
+        .turnover-number {
+            background: var(--accent-red);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .turnover-name {
+            font-weight: 700;
+            color: var(--text-white);
+            font-size: 18px;
+        }
+
+        .turnover-impact {
+            color: var(--accent-red);
+            font-weight: 600;
+        }
+
+        /* Solution Cards */
+        .solution-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 50px;
+        }
+
+        .solution-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px 30px;
+            text-align: center;
+            border-top: 4px solid var(--primary-purple);
+            transition: transform 0.3s ease;
+        }
+
+        .solution-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .solution-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(124, 58, 237, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 36px;
+        }
+
+        .solution-card h4 {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .solution-card p {
+            font-size: 16px;
+        }
+
+        /* Pricing Framework */
+        .framework-box {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px;
+            margin: 30px 0;
+        }
+
+        .framework-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 24px;
+            margin-bottom: 30px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .framework-step:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .step-number {
+            background: var(--primary-purple);
+            color: white;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .step-content h4 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-white);
+        }
+
+        .step-content p {
+            font-size: 16px;
+            margin-bottom: 0;
+        }
+
+        /* Recurring Revenue */
+        .recurring-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 40px;
+            background: var(--card-bg);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .recurring-table th {
+            background: var(--primary-purple);
+            padding: 20px;
+            text-align: left;
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .recurring-table td {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .recurring-table .program-name {
+            font-weight: 700;
+            color: var(--text-white);
+        }
+
+        .recurring-table .price {
+            color: var(--accent-green);
+            font-weight: 700;
+        }
+
+        /* Attractive Offers */
+        .offer-tiers {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-top: 50px;
+        }
+
+        @media (max-width: 768px) {
+            .offer-tiers {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .offer-tier {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .offer-tier.featured {
+            border: 2px solid var(--primary-purple);
+            transform: scale(1.05);
+        }
+
+        .offer-tier.featured::before {
+            content: 'MOST POPULAR';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary-purple);
+            color: white;
+            padding: 6px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .tier-label {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-gray);
+            margin-bottom: 8px;
+        }
+
+        .tier-name {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 20px;
+        }
+
+        .tier-price {
+            font-size: 48px;
+            font-weight: 900;
+            color: var(--primary-purple);
+            margin-bottom: 30px;
+        }
+
+        .tier-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 30px;
+        }
+
+        .tier-features li {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+            color: var(--text-gray);
+        }
+
+        .tier-features li::before {
+            content: '✓';
+            color: var(--accent-green);
+            font-weight: 700;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            background: var(--primary-purple);
+            padding: 80px 24px;
+            text-align: center;
+        }
+
+        .cta-section h2 {
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .cta-section p {
+            color: rgba(255,255,255,0.9);
+            max-width: 600px;
+            margin: 0 auto 40px;
+            font-size: 20px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: var(--primary-purple);
+            padding: 20px 50px;
+            border-radius: 50px;
+            font-size: 20px;
+            font-weight: 800;
+            text-decoration: none;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .cta-price {
+            font-size: 48px;
+            font-weight: 900;
+            color: white;
+            margin: 30px 0 10px;
+        }
+
+        .cta-guarantee {
+            font-size: 16px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* What You Get Box */
+        .what-you-get {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 50px;
+            margin: 50px 0;
+        }
+
+        .get-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 24px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .get-item:last-child {
+            border-bottom: none;
+        }
+
+        .get-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(124, 58, 237, 0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .get-content h4 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-white);
+        }
+
+        .get-content p {
+            font-size: 16px;
+            margin-bottom: 0;
+        }
+
+        /* Daily Focus Checklist */
+        .checklist {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px;
+            margin-top: 40px;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+
+        .check-circle {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--primary-purple);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .check-circle svg {
+            width: 20px;
+            height: 20px;
+            color: var(--primary-purple);
+        }
+
+        .checklist-text {
+            font-size: 18px;
+            color: var(--text-white);
+        }
+
+        /* DNA Visual */
+        .dna-visual {
+            position: relative;
+            padding-left: 60px;
+        }
+
+        .dna-visual::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(to bottom, var(--primary-purple), var(--accent-green));
+            border-radius: 2px;
+        }
+
+        .dna-item {
+            position: relative;
+            padding: 30px 0;
+        }
+
+        .dna-item::before {
+            content: '';
+            position: absolute;
+            left: -48px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            background: var(--primary-purple);
+            border-radius: 50%;
+            border: 4px solid var(--dark-bg);
+        }
+
+        /* Signs Grid */
+        .signs-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            margin-top: 50px;
+        }
+
+        @media (max-width: 768px) {
+            .signs-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .signs-column h3 {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .signs-column h3 svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .signs-column.good h3 { color: var(--accent-green); }
+        .signs-column.bad h3 { color: var(--accent-red); }
+
+        .sign-item {
+            background: var(--card-bg);
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        .signs-column.good .sign-item {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .signs-column.bad .sign-item {
+            border-left: 3px solid var(--accent-red);
+        }
+
+        /* Formula Box */
+        .formula-box {
+            background: linear-gradient(135deg, var(--card-bg) 0%, rgba(124, 58, 237, 0.1) 100%);
+            border: 2px solid var(--primary-purple);
+            border-radius: 16px;
+            padding: 50px;
+            text-align: center;
+            margin: 50px 0;
+        }
+
+        .formula {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--text-white);
+            margin: 30px 0;
+        }
+
+        .formula span {
+            color: var(--primary-purple);
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--darker-bg);
+            padding: 60px 24px;
+            text-align: center;
+        }
+
+        .footer-brand {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+
+        .footer p {
+            font-size: 14px;
+            color: var(--text-gray);
+        }
+
+        /* Page Break for Print */
+        .page-break {
+            page-break-before: always;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .football-stats {
+                flex-direction: column;
+            }
+
+            .stat-divider {
+                transform: rotate(90deg);
+            }
+
+            .framework-step {
+                flex-direction: column;
+            }
+
+            .offer-tier.featured {
+                transform: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<section class="cover">
+    <div class="cover-badge">Free Roofing Pricing Guide</div>
+    <h1>STOP THE<br><span class="highlight">PROFIT LEAKS</span></h1>
+    <p class="cover-subtitle">The Roofing Contractor's Pricing Playbook for Recovering Costs, Building Recurring Revenue & Closing More Deals</p>
+
+    <div class="cover-icon">
+        <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="40" y="80" width="120" height="80" rx="8" fill="#1A1A2E" stroke="#7C3AED" stroke-width="4"/>
+            <path d="M60 100 L100 70 L140 100" stroke="#7C3AED" stroke-width="4" fill="none"/>
+            <circle cx="100" cy="120" r="20" fill="#7C3AED"/>
+            <text x="100" y="127" text-anchor="middle" fill="white" font-size="20" font-weight="bold">$</text>
+            <path d="M80 160 L80 180" stroke="#EF4444" stroke-width="3" stroke-dasharray="5,5"/>
+            <path d="M100 160 L100 185" stroke="#EF4444" stroke-width="3" stroke-dasharray="5,5"/>
+            <path d="M120 160 L120 175" stroke="#EF4444" stroke-width="3" stroke-dasharray="5,5"/>
+            <circle cx="80" cy="185" r="5" fill="#EF4444"/>
+            <circle cx="100" cy="190" r="5" fill="#EF4444"/>
+            <circle cx="120" cy="180" r="5" fill="#EF4444"/>
+        </svg>
+    </div>
+
+    <p class="cover-tagline">A Personalized Guide From</p>
+    <div class="cover-brand">CREWCFO</div>
+</section>
+
+<!-- YOU ARE HERE -->
+<section class="you-are-here">
+    <h2>YOU ARE <span class="highlight">HERE</span></h2>
+    <div class="stage-indicator">PRICING PROBLEM</div>
+
+    <div class="container">
+        <p style="font-size: 22px; color: var(--text-white); max-width: 700px; margin: 0 auto;">
+            You're doing $1M-$4M in revenue. Crews are running. Jobs are closing.<br><br>
+            <strong style="color: var(--accent-red);">But the money disappears before it hits your pocket.</strong>
+        </p>
+    </div>
+</section>
+
+<!-- THE FOOTBALL PROBLEM -->
+<section class="football-section">
+    <div class="container">
+        <h2>THE <span class="highlight">"FOOTBALL"</span> PROBLEM</h2>
+
+        <div class="football-stats">
+            <div class="stat-box">
+                <div class="stat-number green">400</div>
+                <div class="stat-label">Yards Gained</div>
+            </div>
+            <div class="stat-divider">+</div>
+            <div class="stat-box">
+                <div class="stat-number red">5</div>
+                <div class="stat-label">Turnovers</div>
+            </div>
+            <div class="stat-divider">=</div>
+            <div class="stat-box">
+                <div class="stat-number red">LOSE</div>
+                <div class="stat-label">By 30 Points</div>
+            </div>
+        </div>
+
+        <p class="football-message">
+            You can gain 400 yards of offense—<em>busy, booked, crews running</em>—and still <strong>lose by 30</strong> because of 5 turnovers you didn't see.
+            <br><br>
+            <strong style="color: var(--text-white);">That's what silent profit leaks do to roofing companies.</strong>
+            <br><br>
+            You're working. You're billing. But the money disappears before it hits your pocket.
+        </p>
+    </div>
+</section>
+
+<!-- 5 SILENT TURNOVERS -->
+<section class="section">
+    <div class="container">
+        <h2>THE 5 <span class="highlight">SILENT TURNOVERS</span></h2>
+        <p>These are the hidden profit leaks bleeding roofing contractors dry—ranked by typical dollar impact:</p>
+
+        <table class="turnovers-table">
+            <thead>
+                <tr>
+                    <th width="60">#</th>
+                    <th>The Turnover</th>
+                    <th>What's Happening</th>
+                    <th>Typical Impact</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><div class="turnover-number">1</div></td>
+                    <td class="turnover-name">Overhead Not Recovered in Pricing</td>
+                    <td>You're pricing jobs without knowing your true break-even. Every bid is a guess.</td>
+                    <td class="turnover-impact">$50K-$150K/year</td>
+                </tr>
+                <tr>
+                    <td><div class="turnover-number">2</div></td>
+                    <td class="turnover-name">Job Costs Not Tagged</td>
+                    <td>Materials, labor, and subs aren't linked to projects. You don't know which jobs made money.</td>
+                    <td class="turnover-impact">$30K-$80K/year</td>
+                </tr>
+                <tr>
+                    <td><div class="turnover-number">3</div></td>
+                    <td class="turnover-name">Labor Burden Creep</td>
+                    <td>Workers comp, payroll taxes, and benefits aren't factored into your labor rate.</td>
+                    <td class="turnover-impact">$20K-$60K/year</td>
+                </tr>
+                <tr>
+                    <td><div class="turnover-number">4</div></td>
+                    <td class="turnover-name">Cash Gap / AR Lag</td>
+                    <td>You're financing customer projects with your own cash. 60-90 day waits eat your margin.</td>
+                    <td class="turnover-impact">$15K-$40K/year</td>
+                </tr>
+                <tr>
+                    <td><div class="turnover-number">5</div></td>
+                    <td class="turnover-name">Financials Too Late</td>
+                    <td>By the time you see last month's numbers, the damage is done. No time to course-correct.</td>
+                    <td class="turnover-impact">$10K-$30K/year</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="formula-box">
+            <h3>TOTAL ANNUAL LEAK POTENTIAL</h3>
+            <div class="formula">
+                <span>$125K</span> to <span>$360K</span> / year
+            </div>
+            <p style="margin-bottom: 0;">That's money you already earned—walking out the door.</p>
+        </div>
+    </div>
+</section>
+
+<!-- PRICING FRAMEWORK -->
+<section class="section page-break">
+    <div class="container">
+        <h2>THE <span class="highlight">PROFIT FLOOR</span> FRAMEWORK</h2>
+        <p>Before you price another job, you need to know your break-even number. Here's how to find it:</p>
+
+        <div class="framework-box">
+            <div class="framework-step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h4>Calculate Your True Monthly Overhead</h4>
+                    <p>Add up everything that gets paid whether you roof or not: rent, insurance, office staff, truck payments, software, your own salary. Don't guess—pull it from bank statements.</p>
+                </div>
+            </div>
+
+            <div class="framework-step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h4>Add Your Labor Burden</h4>
+                    <p>Take your hourly labor rate and add 25-35% for workers comp, payroll taxes, unemployment, and benefits. A $25/hr worker actually costs you $31-34/hr.</p>
+                </div>
+            </div>
+
+            <div class="framework-step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h4>Find Your Break-Even Revenue</h4>
+                    <p>Divide monthly overhead by your gross profit margin. If overhead is $40K and GP is 35%, you need $114K/month just to break even. That's your Profit Floor.</p>
+                </div>
+            </div>
+
+            <div class="framework-step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <h4>Build the Guardrail Into Every Bid</h4>
+                    <p>Now every estimate includes overhead recovery. No more hoping the job "works out." You know before you bid whether it'll make money.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="formula-box">
+            <h3>THE PROFIT FLOOR FORMULA</h3>
+            <div class="formula">
+                Monthly Overhead ÷ Gross Profit % = <span>Break-Even Revenue</span>
+            </div>
+            <p style="margin-bottom: 0;">Example: $40,000 ÷ 0.35 = $114,286/month minimum</p>
+        </div>
+    </div>
+</section>
+
+<!-- RECURRING REVENUE -->
+<section class="section">
+    <div class="container">
+        <h2>BUILD <span class="highlight">RECURRING REVENUE</span></h2>
+        <p>One-time roof jobs are feast or famine. Smart contractors build monthly income that shows up whether they close a new deal or not.</p>
+
+        <table class="recurring-table">
+            <thead>
+                <tr>
+                    <th>Program</th>
+                    <th>What You Offer</th>
+                    <th>Typical Price</th>
+                    <th>Annual Value (100 customers)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="program-name">Annual Maintenance Agreement</td>
+                    <td>2 inspections/year, minor repairs included, priority scheduling</td>
+                    <td class="price">$299-$499/year</td>
+                    <td class="price">$29,900-$49,900</td>
+                </tr>
+                <tr>
+                    <td class="program-name">Gutter Cleaning Package</td>
+                    <td>Quarterly gutter cleaning + downspout flush</td>
+                    <td class="price">$149-$249/year</td>
+                    <td class="price">$14,900-$24,900</td>
+                </tr>
+                <tr>
+                    <td class="program-name">Storm Watch Service</td>
+                    <td>Post-storm inspection within 48 hours, insurance claim support</td>
+                    <td class="price">$199-$349/year</td>
+                    <td class="price">$19,900-$34,900</td>
+                </tr>
+                <tr>
+                    <td class="program-name">Extended Workmanship Warranty</td>
+                    <td>10-year warranty upgrade (beyond standard 5-year)</td>
+                    <td class="price">$500-$800 one-time</td>
+                    <td class="price">$50,000-$80,000</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="formula-box">
+            <h3>THE RECURRING REVENUE MULTIPLIER</h3>
+            <div class="formula">
+                100 maintenance customers × $350/year = <span>$35,000</span>/year
+            </div>
+            <p style="margin-bottom: 0;">That's pure recurring revenue that arrives before you sell a single new roof.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ATTRACTIVE PRICING -->
+<section class="section page-break">
+    <div class="container">
+        <h2>PRICING THAT <span class="highlight">CLOSES DEALS</span></h2>
+        <p>Stop competing on price. Win on value with Good/Better/Best options that let customers choose their investment level.</p>
+
+        <div class="offer-tiers">
+            <div class="offer-tier">
+                <div class="tier-label">Option 1</div>
+                <div class="tier-name">Good</div>
+                <div class="tier-price">$12,500</div>
+                <ul class="tier-features">
+                    <li>Standard 3-tab shingles</li>
+                    <li>Synthetic underlayment</li>
+                    <li>5-year workmanship warranty</li>
+                    <li>Basic ventilation check</li>
+                    <li>Standard cleanup</li>
+                </ul>
+            </div>
+
+            <div class="offer-tier featured">
+                <div class="tier-label">Option 2</div>
+                <div class="tier-name">Better</div>
+                <div class="tier-price">$16,800</div>
+                <ul class="tier-features">
+                    <li>Architectural shingles</li>
+                    <li>Ice & water shield in valleys</li>
+                    <li>10-year workmanship warranty</li>
+                    <li>Ridge vent upgrade</li>
+                    <li>Gutter inspection included</li>
+                    <li>2-year maintenance plan</li>
+                </ul>
+            </div>
+
+            <div class="offer-tier">
+                <div class="tier-label">Option 3</div>
+                <div class="tier-name">Best</div>
+                <div class="tier-price">$22,400</div>
+                <ul class="tier-features">
+                    <li>Premium designer shingles</li>
+                    <li>Full ice & water shield</li>
+                    <li>Lifetime workmanship warranty</li>
+                    <li>Complete ventilation system</li>
+                    <li>New gutters included</li>
+                    <li>5-year maintenance plan</li>
+                    <li>Priority storm response</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 50px;">
+            <h3 style="color: var(--text-white);">Why This Works</h3>
+            <div class="problem-grid" style="margin-top: 30px;">
+                <div class="problem-card" style="border-left-color: var(--accent-green);">
+                    <h4>Anchoring Effect</h4>
+                    <p>The "Best" option makes "Better" feel reasonable. Most customers choose the middle.</p>
+                </div>
+                <div class="problem-card" style="border-left-color: var(--accent-green);">
+                    <h4>No Price Objection</h4>
+                    <p>Instead of "too expensive," customers ask "which one?" You've reframed the decision.</p>
+                </div>
+                <div class="problem-card" style="border-left-color: var(--accent-green);">
+                    <h4>Higher Average Ticket</h4>
+                    <p>30-40% of customers upgrade from "Good" to "Better" when given clear options.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- DAILY FOCUS -->
+<section class="section">
+    <div class="container">
+        <h2>YOUR <span class="highlight">DAILY FOCUS</span></h2>
+        <p>Stop the profit leaks by building these habits into your operation:</p>
+
+        <div class="checklist">
+            <div class="checklist-item">
+                <div class="check-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <span class="checklist-text">Know your break-even number before you bid</span>
+            </div>
+
+            <div class="checklist-item">
+                <div class="check-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <span class="checklist-text">Tag every cost to its job in QuickBooks</span>
+            </div>
+
+            <div class="checklist-item">
+                <div class="check-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <span class="checklist-text">Use burdened labor rates in every estimate</span>
+            </div>
+
+            <div class="checklist-item">
+                <div class="check-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <span class="checklist-text">Collect deposits to reduce cash gap</span>
+            </div>
+
+            <div class="checklist-item">
+                <div class="check-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <span class="checklist-text">Offer Good/Better/Best on every proposal</span>
+            </div>
+
+            <div class="checklist-item">
+                <div class="check-circle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <span class="checklist-text">Pitch maintenance agreements on every completed job</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- SIGNS -->
+<section class="section">
+    <div class="container">
+        <h2>THE <span class="highlight">SECRET</span> TO SUCCESS</h2>
+
+        <div class="signs-grid">
+            <div class="signs-column good">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                    Signs You're Doing It Right
+                </h3>
+                <div class="sign-item">You know your break-even number</div>
+                <div class="sign-item">Every job shows profit/loss in QuickBooks</div>
+                <div class="sign-item">Customers choose from options, not just price</div>
+                <div class="sign-item">Recurring revenue covers some overhead</div>
+                <div class="sign-item">You check financials weekly, not quarterly</div>
+                <div class="sign-item">Cash flow is predictable</div>
+            </div>
+
+            <div class="signs-column bad">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    Signs You Need More Work
+                </h3>
+                <div class="sign-item">You guess at prices based on "what feels right"</div>
+                <div class="sign-item">No idea which jobs made money</div>
+                <div class="sign-item">Customers always beat you down on price</div>
+                <div class="sign-item">100% of revenue is one-time jobs</div>
+                <div class="sign-item">You look at books once a year for taxes</div>
+                <div class="sign-item">Always surprised by cash shortages</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA SECTION -->
+<section class="cta-section page-break">
+    <div class="container">
+        <h2>WANT TO FIND YOUR<br>EXACT PROFIT LEAKS?</h2>
+        <p>Get your personalized Profit Leak Report. Connect QuickBooks, see your break-even number, and find out exactly where money is walking out the door.</p>
+
+        <div class="cta-price">$99</div>
+        <p class="cta-guarantee">Full refund if you don't find it useful. No questions asked.</p>
+
+        <a href="#" class="cta-button">Get Your Profit Leak Report</a>
+
+        <div class="what-you-get" style="margin-top: 60px; text-align: left;">
+            <h3 style="text-align: center; margin-bottom: 30px;">What You Get</h3>
+
+            <div class="get-item">
+                <div class="get-icon">📊</div>
+                <div class="get-content">
+                    <h4>Break-Even Floor</h4>
+                    <p>The minimum you must collect monthly to not lose money—even if your books are messy.</p>
+                </div>
+            </div>
+
+            <div class="get-item">
+                <div class="get-icon">🔢</div>
+                <div class="get-content">
+                    <h4>True Overhead Number</h4>
+                    <p>Your real monthly burn from bank + payroll data—not what QuickBooks says.</p>
+                </div>
+            </div>
+
+            <div class="get-item">
+                <div class="get-icon">🚨</div>
+                <div class="get-content">
+                    <h4>Top 5 Profit Leaks</h4>
+                    <p>Ranked by dollar impact—where money is walking out the door.</p>
+                </div>
+            </div>
+
+            <div class="get-item">
+                <div class="get-icon">🏈</div>
+                <div class="get-content">
+                    <h4>1-Page Turnover Scoreboard</h4>
+                    <p>Simple. No jargon. Just your score and what to fix first.</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px;">
+            <h3 style="color: white;">Your Guarantee</h3>
+            <p style="max-width: 600px; margin: 20px auto 0;">
+                <strong>Option A:</strong> Full refund if you don't find it useful.<br>
+                <strong>Option B:</strong> Your $99 applies as credit toward the 90-Day Profit Leak Proof—where we install the guardrails automatically.
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- FINAL MESSAGE -->
+<section class="section" style="text-align: center;">
+    <div class="container">
+        <h2>REMEMBER</h2>
+        <p style="font-size: 22px; color: var(--text-white); max-width: 700px; margin: 0 auto 30px;">
+            You're not bad at roofing.<br>
+            <strong style="color: var(--primary-purple);">You're just fumbling money between the job site and the bank.</strong>
+        </p>
+        <p style="font-size: 18px; max-width: 600px; margin: 0 auto;">
+            Fix the leaks, and the profit you already earned shows up in your account instead of disappearing into thin air.
+        </p>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+    <div class="footer-brand">CREWCFO</div>
+    <p>Fractional CFO Services for Roofing Contractors</p>
+    <p style="margin-top: 20px; font-size: 12px;">© 2024 CrewCFO. All rights reserved.</p>
+</footer>
+
+</body>
+</html>

@@ -78,7 +78,7 @@ class ValuationEngine:
         invoices = self.supabase.table("transactions")\
             .select("total_amount")\
             .eq("tenant_id", self.tenant_id)\
-            .eq("transaction_type", "invoice")\
+            .eq("qbo_type", "Invoice")\
             .gte("transaction_date", start_date.isoformat())\
             .lte("transaction_date", end_date.isoformat())\
             .neq("status", "voided")\
@@ -97,7 +97,7 @@ class ValuationEngine:
         expenses = self.supabase.table("transactions")\
             .select("total_amount, description, category")\
             .eq("tenant_id", self.tenant_id)\
-            .in_("transaction_type", ["bill", "expense"])\
+            .in_("qbo_type", ["Bill", "Expense", "Purchase"])\
             .gte("transaction_date", start_date.isoformat())\
             .lte("transaction_date", end_date.isoformat())\
             .neq("status", "voided")\
@@ -147,7 +147,7 @@ class ValuationEngine:
         expenses = self.supabase.table("transactions")\
             .select("total_amount, description")\
             .eq("tenant_id", self.tenant_id)\
-            .in_("transaction_type", ["bill", "expense"])\
+            .in_("qbo_type", ["Bill", "Expense"])\
             .gte("transaction_date", start_date.isoformat())\
             .lte("transaction_date", end_date.isoformat())\
             .neq("status", "voided")\
@@ -427,6 +427,8 @@ class ValuationEngine:
         }
         
         return snapshot_data
+
+
 
 
 
