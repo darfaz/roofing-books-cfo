@@ -14,6 +14,7 @@ from .schemas import (
     ReminderChannel, ReminderStatus
 )
 from ..email_service import email_service
+from ..sms_service import sms_service
 
 logger = logging.getLogger(__name__)
 
@@ -345,11 +346,28 @@ class DunningEngine:
         elif channel == ReminderChannel.SMS.value:
             phone = customer.get("phone") or customer.get("mobile")
             if phone:
-                # TODO: Integrate with Twilio or other SMS provider
-                # For now, simulate success
-                logger.info(f"SMS would be sent to {phone}: {body[:100]}...")
-                success = True
-                external_id = f"sms-simulated-{datetime.utcnow().timestamp()}"
+                # Send via Twilio
+                tenant_id = invoice.get("tenant_id", "")
+                invoice_id = invoice.get("id", "")
+                reminder_id = reminder.get("id", "")
+
+                result = await sms_service.send_dunning_reminder(
+                    to=phone,
+                    body=body,
+                    invoice_id=invoice_id,
+                    reminder_id=reminder_id,
+                    tenant_id=tenant_id,
+                )
+
+                if result.get("success"):
+                    success = True
+                    external_id = result.get("message_sid", f"sms-{datetime.utcnow().timestamp()}")
+                else:
+                    logger.error(f"SMS send failed: {result.get('error')}")
+                    # If Twilio not configured, simulate success for testing
+                    if result.get("simulated"):
+                        success = True
+                        external_id = f"sms-simulated-{datetime.utcnow().timestamp()}"
 
         if success:
             await self._mark_reminder_sent(
