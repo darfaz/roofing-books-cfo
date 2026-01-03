@@ -50,7 +50,7 @@ export function PaymentPortal({ token }: PaymentPortalProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<string>('card')
   const [processing, setProcessing] = useState(false)
-  const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [paymentSuccess, _setPaymentSuccess] = useState(false)
 
   useEffect(() => {
     const fetchInvoice = async () => {
