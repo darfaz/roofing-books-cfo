@@ -3,9 +3,12 @@ Roofing Books CFO - API Server
 FastAPI application for bookkeeping automation
 """
 import os
+import logging
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
+
+logger = logging.getLogger(__name__)
 from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -3133,14 +3136,18 @@ async def send_contact_message(
 
             if response.status_code not in [200, 201]:
                 error_detail = response.json() if response.content else {}
+                logger.error(f"Resend API error: {response.status_code} - {error_detail}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to send email: {error_detail.get('message', 'Unknown error')}"
                 )
 
+            result = response.json()
+            logger.info(f"Support email sent successfully: {result.get('id')}")
             return {
                 "success": True,
-                "message": "Your message has been sent. We'll get back to you soon!"
+                "message": "Your message has been sent. We'll get back to you soon!",
+                "email_id": result.get("id")
             }
     except httpx.RequestError as e:
         raise HTTPException(
