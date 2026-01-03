@@ -5,11 +5,15 @@ Generates and sends the Friday Payday summary email to business owners.
 Includes collection highlights, AR status, and week-over-week comparison.
 """
 import os
+import logging
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from supabase import create_client, Client as SupabaseClient
 from .schemas import FridayPaydaySummary
+from ..email_service import email_service
+
+logger = logging.getLogger(__name__)
 
 
 class FridayEmailService:
@@ -326,9 +330,21 @@ class FridayEmailService:
         if not owner_email:
             return False
 
-        # TODO: Integrate with Resend to actually send the email
-        # For now, just log and return True
-        print(f"Would send Friday Payday email to {owner_email}")
+        # Send via Resend
+        company_name = tenant.get("name", "Your Company")
+        result = await email_service.send_friday_summary(
+            to=owner_email,
+            html=html,
+            tenant_id=tenant_id,
+            company_name=company_name,
+        )
+
+        if not result.get("success"):
+            logger.error(f"Failed to send Friday summary to {owner_email}: {result.get('error')}")
+            if not result.get("simulated"):
+                return False
+        else:
+            logger.info(f"Friday summary sent to {owner_email}")
 
         # Store the summary for analytics
         self.supabase.table("fp_weekly_summaries").insert({

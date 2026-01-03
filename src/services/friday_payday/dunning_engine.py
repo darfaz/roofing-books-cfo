@@ -5,6 +5,7 @@ Handles automated reminder scheduling and sending based on dunning sequences.
 Processes invoices that are overdue and need collection action.
 """
 import os
+import logging
 from datetime import datetime, timedelta, date
 from typing import Optional, List, Dict, Any
 from supabase import create_client, Client as SupabaseClient
@@ -12,6 +13,9 @@ from .schemas import (
     PayerType, InvoiceStatus, SequenceStatus,
     ReminderChannel, ReminderStatus
 )
+from ..email_service import email_service
+
+logger = logging.getLogger(__name__)
 
 
 class DunningEngine:
@@ -309,18 +313,43 @@ class DunningEngine:
         if channel == ReminderChannel.EMAIL.value:
             email = customer.get("email")
             if email:
-                # TODO: Integrate with Resend or other email provider
-                # For now, just mark as sent
-                success = True
-                external_id = f"email-{datetime.utcnow().timestamp()}"
+                # Send via Resend
+                tenant_id = invoice.get("tenant_id", "")
+                invoice_id = invoice.get("id", "")
+                reminder_id = reminder.get("id", "")
+
+                # Wrap body in HTML if needed
+                html_body = body
+                if not body.strip().startswith("<"):
+                    html_body = f"<div style='font-family: sans-serif; line-height: 1.6;'>{body.replace(chr(10), '<br>')}</div>"
+
+                result = await email_service.send_dunning_reminder(
+                    to=email,
+                    subject=subject,
+                    html=html_body,
+                    invoice_id=invoice_id,
+                    reminder_id=reminder_id,
+                    tenant_id=tenant_id,
+                )
+
+                if result.get("success"):
+                    success = True
+                    external_id = result.get("message_id", f"email-{datetime.utcnow().timestamp()}")
+                else:
+                    logger.error(f"Email send failed: {result.get('error')}")
+                    # If Resend not configured, simulate success for testing
+                    if result.get("simulated"):
+                        success = True
+                        external_id = f"simulated-{datetime.utcnow().timestamp()}"
 
         elif channel == ReminderChannel.SMS.value:
             phone = customer.get("phone") or customer.get("mobile")
             if phone:
                 # TODO: Integrate with Twilio or other SMS provider
-                # For now, just mark as sent
+                # For now, simulate success
+                logger.info(f"SMS would be sent to {phone}: {body[:100]}...")
                 success = True
-                external_id = f"sms-{datetime.utcnow().timestamp()}"
+                external_id = f"sms-simulated-{datetime.utcnow().timestamp()}"
 
         if success:
             await self._mark_reminder_sent(

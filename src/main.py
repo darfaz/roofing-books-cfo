@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, Depends, Body, UploadFile, File, Form, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from src.services.qbo.sync import QBOSyncService
@@ -4835,6 +4835,152 @@ async def fp_demo_data():
         },
         "source": "demo"
     }
+
+
+# ============================================================
+# SCHEDULED JOBS / CRON ENDPOINTS
+# ============================================================
+
+CRON_SECRET = os.getenv("CRON_SECRET", "")
+
+
+def verify_cron_secret(x_cron_secret: str = Header(None)):
+    """Verify the cron secret for scheduled job endpoints."""
+    if not CRON_SECRET:
+        # If no secret configured, allow (for development)
+        return True
+    if x_cron_secret != CRON_SECRET:
+        raise HTTPException(401, "Invalid cron secret")
+    return True
+
+
+@app.post("/api/cron/process-dunning")
+async def cron_process_dunning(
+    _: bool = Depends(verify_cron_secret)
+):
+    """
+    Process dunning for all tenants with Friday Payday enabled.
+    Call this daily (e.g., 9am) to send overdue reminders.
+    """
+    try:
+        # Get all tenants with Friday Payday enabled
+        result = supabase.table("tenants").select(
+            "id, name, fp_settings"
+        ).execute()
+
+        tenants = result.data or []
+        results = {
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "details": []
+        }
+
+        for tenant in tenants:
+            fp_settings = tenant.get("fp_settings", {}) or {}
+            if not fp_settings.get("enabled", False):
+                results["skipped"] += 1
+                continue
+
+            try:
+                summary = await fp_dunning.process_tenant(tenant["id"])
+                results["processed"] += 1
+                results["details"].append({
+                    "tenant_id": tenant["id"],
+                    "tenant_name": tenant.get("name"),
+                    "reminders_sent": summary.get("reminders_sent", 0),
+                })
+            except Exception as e:
+                logger.error(f"Dunning failed for tenant {tenant['id']}: {e}")
+                results["failed"] += 1
+                results["details"].append({
+                    "tenant_id": tenant["id"],
+                    "error": str(e),
+                })
+
+        return {
+            "success": True,
+            "message": f"Processed {results['processed']} tenants",
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"Cron dunning failed: {e}")
+        raise HTTPException(500, f"Failed to process dunning: {str(e)}")
+
+
+@app.post("/api/cron/friday-summary")
+async def cron_friday_summary(
+    _: bool = Depends(verify_cron_secret)
+):
+    """
+    Send Friday Payday weekly summary to all enabled tenants.
+    Call this every Friday (e.g., 5pm) to send weekly summaries.
+    """
+    try:
+        result = await fp_email.send_all_summaries()
+
+        return {
+            "success": True,
+            "message": f"Sent {result.get('sent', 0)} summaries",
+            "results": result
+        }
+
+    except Exception as e:
+        logger.error(f"Cron Friday summary failed: {e}")
+        raise HTTPException(500, f"Failed to send summaries: {str(e)}")
+
+
+@app.post("/api/cron/sync-invoices")
+async def cron_sync_invoices(
+    _: bool = Depends(verify_cron_secret)
+):
+    """
+    Sync invoices from QuickBooks for all connected tenants.
+    Call this daily (e.g., 6am) to keep invoice data fresh.
+    """
+    try:
+        # Get all tenants with QBO connected
+        result = supabase.table("tenant_integrations").select(
+            "tenant_id, tenants(name)"
+        ).eq("provider", "quickbooks").eq("is_active", True).execute()
+
+        integrations = result.data or []
+        results = {
+            "synced": 0,
+            "failed": 0,
+            "details": []
+        }
+
+        for integration in integrations:
+            tenant_id = integration.get("tenant_id")
+            tenant_name = integration.get("tenants", {}).get("name", "Unknown")
+
+            try:
+                sync_result = await fp_sync.sync_tenant(tenant_id)
+                results["synced"] += 1
+                results["details"].append({
+                    "tenant_id": tenant_id,
+                    "tenant_name": tenant_name,
+                    "invoices_synced": sync_result.get("invoices_synced", 0),
+                })
+            except Exception as e:
+                logger.error(f"Invoice sync failed for tenant {tenant_id}: {e}")
+                results["failed"] += 1
+                results["details"].append({
+                    "tenant_id": tenant_id,
+                    "error": str(e),
+                })
+
+        return {
+            "success": True,
+            "message": f"Synced {results['synced']} tenants",
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"Cron invoice sync failed: {e}")
+        raise HTTPException(500, f"Failed to sync invoices: {str(e)}")
 
 
 # ============================================================

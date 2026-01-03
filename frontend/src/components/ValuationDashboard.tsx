@@ -8,6 +8,7 @@ import { ShockReport } from './ShockReport'
 import { ProfitLeakReport } from './ProfitLeakReport'
 import { OwnerDashboard } from './OwnerDashboard'
 import { FinanceDashboard } from './FinanceDashboard'
+import { FridayPaydayDashboard } from './FridayPayday/FridayPaydayDashboard'
 import { Tabs } from './ui/Tabs'
 import { GlassCard } from './ui/GlassCard'
 import { useDemoMode } from '../context/DemoContext'
@@ -34,7 +35,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
   const [snapshot, setSnapshot] = useState<ValuationSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'leaks' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'finance' | 'collections' | 'leaks' | 'shock' | 'scenario' | 'exit' | 'roadmap'>('dashboard')
   const [qboConnected, setQboConnected] = useState<boolean | null>(null)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
   const { isDemoMode } = useDemoMode()
@@ -186,6 +187,7 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
     () => [
       { key: 'dashboard' as const, label: 'Dashboard', icon: '📊' },
       { key: 'finance' as const, label: 'Finance', icon: '💵' },
+      { key: 'collections' as const, label: 'Collections', icon: '💰' },
       { key: 'leaks' as const, label: 'Profit Leaks', icon: '🔍' },
       { key: 'shock' as const, label: 'Shock Report', icon: '⚡' },
       { key: 'scenario' as const, label: 'Simulator', icon: '🎮' },
@@ -348,6 +350,16 @@ export function ValuationDashboard({ accessToken }: { accessToken: string }) {
                 exit={{ opacity: 0, y: -20 }}
               >
                 <FinanceDashboard accessToken={accessToken} isDemoMode={isDemoMode} />
+              </motion.div>
+            )}
+            {activeTab === 'collections' && (
+              <motion.div
+                key="collections"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <FridayPaydayDashboard accessToken={accessToken} />
               </motion.div>
             )}
             {activeTab === 'leaks' && (
