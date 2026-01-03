@@ -20,6 +20,8 @@ interface InvoiceDetails {
   company_email: string | null
   payment_methods: string[]
   brand_color: string
+  tenant_id?: string
+  invoice_id?: string
 }
 
 interface PaymentPortalProps {
@@ -87,14 +89,29 @@ export function PaymentPortal({ token }: PaymentPortalProps) {
     setProcessing(true)
 
     try {
-      // TODO: Integrate with Stripe/payment processor
-      // For now, simulate payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Call Stripe checkout endpoint
+      const invoiceId = invoice.invoice_id || token
+      const tenantId = invoice.tenant_id || ''
 
-      setPaymentSuccess(true)
+      const response = await fetch(
+        `/api/pay/${invoiceId}/checkout?tenant_id=${tenantId}`,
+        { method: 'POST' }
+      )
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Payment failed')
+      }
+
+      // Redirect to Stripe Checkout
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url
+      } else {
+        throw new Error('No checkout URL returned')
+      }
     } catch (err) {
-      setError('Payment failed. Please try again.')
-    } finally {
+      setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
       setProcessing(false)
     }
   }

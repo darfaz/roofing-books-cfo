@@ -4845,6 +4845,52 @@ async def fp_demo_data():
 
 
 # ============================================================
+# PAYMENT PORTAL ENDPOINTS
+# ============================================================
+
+from src.services.payment_service import payment_service
+
+
+@app.get("/api/pay/{invoice_id}")
+async def get_invoice_for_payment(invoice_id: str):
+    """
+    Get invoice details for the payment portal.
+    Public endpoint - no auth required (used by payment link).
+    """
+    result = await payment_service.get_invoice_for_payment(invoice_id)
+    if not result.get("success"):
+        raise HTTPException(404, result.get("error", "Invoice not found"))
+    return result
+
+
+@app.post("/api/pay/{invoice_id}/checkout")
+async def create_payment_checkout(invoice_id: str, tenant_id: str):
+    """
+    Create a Stripe checkout session for paying an invoice.
+    Returns checkout URL to redirect customer.
+    """
+    result = await payment_service.create_payment_session(invoice_id, tenant_id)
+    if not result.get("success"):
+        raise HTTPException(400, result.get("error", "Failed to create checkout"))
+    return result
+
+
+@app.post("/api/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """
+    Handle Stripe webhook events.
+    Processes payment completions to update invoice status.
+    """
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+
+    result = await payment_service.handle_webhook(payload, signature)
+    if not result.get("success"):
+        raise HTTPException(400, result.get("error", "Webhook handling failed"))
+    return result
+
+
+# ============================================================
 # SCHEDULED JOBS / CRON ENDPOINTS
 # ============================================================
 
