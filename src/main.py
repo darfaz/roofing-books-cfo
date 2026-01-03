@@ -4183,6 +4183,661 @@ async def get_profit_leaks(
 
 
 # ============================================================
+# FRIDAY PAYDAY - COLLECTIONS AUTOMATION
+# ============================================================
+
+from src.services.friday_payday import (
+    FridayPaydaySync,
+    FridayPaydayAnalytics,
+    DunningEngine,
+    TemplateService,
+    FridayEmailService,
+    PayerType,
+    InvoiceStatus,
+    SequenceStatus,
+)
+
+# Initialize Friday Payday services
+fp_sync = FridayPaydaySync(supabase)
+fp_analytics = FridayPaydayAnalytics(supabase)
+fp_dunning = DunningEngine()
+fp_templates = TemplateService()
+fp_friday_email = FridayEmailService()
+
+
+@app.get("/api/friday-payday/invoices")
+async def fp_get_invoices(
+    tenant_id: str = Depends(get_current_tenant_id),
+    status: Optional[str] = None,
+    payer_type: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 50
+):
+    """Get Friday Payday invoices with filtering and pagination."""
+    try:
+        status_enum = InvoiceStatus(status) if status else None
+        payer_type_enum = PayerType(payer_type) if payer_type else None
+
+        invoices, total = await fp_sync.get_invoices(
+            tenant_id=tenant_id,
+            status=status_enum,
+            payer_type=payer_type_enum,
+            page=page,
+            per_page=per_page
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "invoices": invoices,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "has_more": (page * per_page) < total
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get invoices: {str(e)}")
+
+
+@app.get("/api/friday-payday/invoices/{invoice_id}")
+async def fp_get_invoice(
+    invoice_id: str,
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Get a single Friday Payday invoice with full details."""
+    try:
+        invoice = await fp_sync.get_invoice_by_id(tenant_id, invoice_id)
+        if not invoice:
+            raise HTTPException(404, "Invoice not found")
+
+        return {"success": True, "data": invoice}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get invoice: {str(e)}")
+
+
+@app.patch("/api/friday-payday/invoices/{invoice_id}")
+async def fp_update_invoice(
+    invoice_id: str,
+    updates: Dict[str, Any] = Body(...),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Update a Friday Payday invoice (classification, status, etc.)."""
+    try:
+        # Validate payer_type if provided
+        if "payer_type" in updates:
+            updates["payer_type"] = PayerType(updates["payer_type"]).value
+
+        invoice = await fp_sync.update_invoice(tenant_id, invoice_id, updates)
+        if not invoice:
+            raise HTTPException(404, "Invoice not found")
+
+        return {"success": True, "data": invoice}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to update invoice: {str(e)}")
+
+
+@app.post("/api/friday-payday/invoices/{invoice_id}/pause")
+async def fp_pause_sequence(
+    invoice_id: str,
+    reason: Optional[str] = Body(None, embed=True),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Pause the dunning sequence for an invoice."""
+    try:
+        success = await fp_sync.pause_sequence(tenant_id, invoice_id, reason)
+        if not success:
+            raise HTTPException(404, "Invoice not found")
+
+        return {"success": True, "message": "Sequence paused"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to pause sequence: {str(e)}")
+
+
+@app.post("/api/friday-payday/invoices/{invoice_id}/resume")
+async def fp_resume_sequence(
+    invoice_id: str,
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Resume the dunning sequence for an invoice."""
+    try:
+        success = await fp_sync.resume_sequence(tenant_id, invoice_id)
+        if not success:
+            raise HTTPException(404, "Invoice not found")
+
+        return {"success": True, "message": "Sequence resumed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to resume sequence: {str(e)}")
+
+
+@app.get("/api/friday-payday/analytics/aging")
+async def fp_get_ar_aging(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Get AR aging summary."""
+    try:
+        aging = await fp_analytics.get_ar_aging(tenant_id)
+        return {
+            "success": True,
+            "data": {
+                "as_of_date": aging.as_of_date.isoformat(),
+                "buckets": [
+                    {
+                        "bucket": b.bucket,
+                        "amount": float(b.amount),
+                        "count": b.count,
+                        "percentage": float(b.percentage)
+                    }
+                    for b in aging.buckets
+                ],
+                "total_ar": float(aging.total_ar),
+                "total_invoices": aging.total_invoices,
+                "dso": float(aging.dso) if aging.dso else None
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get AR aging: {str(e)}")
+
+
+@app.get("/api/friday-payday/analytics/dso")
+async def fp_get_dso(
+    tenant_id: str = Depends(get_current_tenant_id),
+    days: int = 90
+):
+    """Get DSO trend data."""
+    try:
+        dso = await fp_analytics.calculate_dso(tenant_id, days)
+        trend = await fp_analytics.get_dso_trend(tenant_id, days)
+
+        return {
+            "success": True,
+            "data": {
+                "current_dso": float(dso) if dso else None,
+                "industry_benchmark": 83,
+                "trend": [
+                    {
+                        "date": t.date.isoformat(),
+                        "dso": float(t.dso),
+                        "benchmark": float(t.industry_benchmark)
+                    }
+                    for t in trend
+                ]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get DSO: {str(e)}")
+
+
+@app.get("/api/friday-payday/analytics/collected")
+async def fp_get_collected(
+    tenant_id: str = Depends(get_current_tenant_id),
+    days: int = 7
+):
+    """Get collection metrics for a period."""
+    try:
+        metrics = await fp_analytics.get_collection_metrics(tenant_id, days)
+
+        return {
+            "success": True,
+            "data": {
+                "period_start": metrics.period_start.isoformat(),
+                "period_end": metrics.period_end.isoformat(),
+                "amount_collected": float(metrics.amount_collected),
+                "invoices_paid": metrics.invoices_paid,
+                "reminders_sent": metrics.reminders_sent,
+                "reminders_opened": metrics.reminders_opened,
+                "reminders_clicked": metrics.reminders_clicked,
+                "open_rate": round(
+                    metrics.reminders_opened / metrics.reminders_sent * 100, 1
+                ) if metrics.reminders_sent > 0 else 0,
+                "click_rate": round(
+                    metrics.reminders_clicked / metrics.reminders_sent * 100, 1
+                ) if metrics.reminders_sent > 0 else 0
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get collection metrics: {str(e)}")
+
+
+@app.get("/api/friday-payday/summary")
+async def fp_get_friday_summary(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Get the Friday Payday weekly summary."""
+    try:
+        summary = await fp_analytics.get_friday_summary(tenant_id)
+
+        return {
+            "success": True,
+            "data": {
+                "week_start": summary.week_start.isoformat(),
+                "week_end": summary.week_end.isoformat(),
+                "amount_collected": float(summary.amount_collected),
+                "invoices_paid": summary.invoices_paid,
+                "vs_last_week": {
+                    "amount": float(summary.vs_last_week_amount),
+                    "percentage": float(summary.vs_last_week_pct)
+                },
+                "top_payments": summary.top_payments,
+                "outstanding": {
+                    "balance": float(summary.outstanding_balance),
+                    "invoices": summary.outstanding_invoices
+                },
+                "current_dso": float(summary.current_dso)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get Friday summary: {str(e)}")
+
+
+@app.post("/api/friday-payday/sync")
+async def fp_trigger_sync(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Trigger a Friday Payday invoice sync from QBO data."""
+    try:
+        # Run sync synchronously to get results
+        result = await fp_sync.sync_tenant(tenant_id)
+
+        return {
+            "success": True,
+            "message": f"Synced {result.get('invoices_synced', 0)} invoices",
+            "stats": result
+        }
+    except Exception as e:
+        logger.error(f"Friday Payday sync failed for tenant {tenant_id}: {e}")
+        raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
+@app.post("/api/friday-payday/process-dunning")
+async def fp_process_dunning(
+    background_tasks: BackgroundTasks,
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Process dunning sequences for all overdue invoices."""
+    try:
+        # Run dunning in background
+        async def run_dunning():
+            await fp_dunning.process_tenant(tenant_id)
+
+        background_tasks.add_task(run_dunning)
+
+        return {
+            "success": True,
+            "message": "Dunning processing started in background"
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to start dunning: {str(e)}")
+
+
+@app.get("/api/friday-payday/customers")
+async def fp_get_customers(
+    tenant_id: str = Depends(get_current_tenant_id),
+    page: int = 1,
+    per_page: int = 50
+):
+    """Get Friday Payday customers."""
+    try:
+        offset = (page - 1) * per_page
+
+        result = supabase.table("fp_customers").select(
+            "id, display_name, email, phone, customer_type, total_outstanding, is_suppressed"
+        ).eq("tenant_id", tenant_id).order(
+            "total_outstanding", desc=True
+        ).range(offset, offset + per_page - 1).execute()
+
+        count_result = supabase.table("fp_customers").select(
+            "id", count="exact"
+        ).eq("tenant_id", tenant_id).execute()
+
+        return {
+            "success": True,
+            "data": {
+                "customers": result.data or [],
+                "total": count_result.count or 0,
+                "page": page,
+                "per_page": per_page
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get customers: {str(e)}")
+
+
+@app.post("/api/friday-payday/customers/{customer_id}/suppress")
+async def fp_suppress_customer(
+    customer_id: str,
+    reason: str = Body(..., embed=True),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Suppress communications for a customer."""
+    try:
+        from datetime import datetime
+
+        result = supabase.table("fp_customers").update({
+            "is_suppressed": True,
+            "suppressed_reason": reason,
+            "suppressed_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("tenant_id", tenant_id).eq("id", customer_id).execute()
+
+        if not result.data:
+            raise HTTPException(404, "Customer not found")
+
+        return {"success": True, "message": "Customer suppressed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to suppress customer: {str(e)}")
+
+
+@app.get("/api/friday-payday/sequences")
+async def fp_get_sequences(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Get dunning sequences for a tenant."""
+    try:
+        result = supabase.table("fp_sequences").select(
+            "*, fp_sequence_steps(*)"
+        ).eq("tenant_id", tenant_id).order("payer_type").execute()
+
+        return {"success": True, "data": result.data or []}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get sequences: {str(e)}")
+
+
+@app.get("/api/friday-payday/templates")
+async def fp_get_templates(
+    tenant_id: str = Depends(get_current_tenant_id),
+    channel: Optional[str] = None
+):
+    """Get message templates for a tenant."""
+    try:
+        templates = await fp_templates.get_templates(tenant_id, channel)
+        return {"success": True, "data": templates}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get templates: {str(e)}")
+
+
+@app.post("/api/friday-payday/templates")
+async def fp_create_template(
+    template: Dict[str, Any] = Body(...),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Create a new message template."""
+    try:
+        new_template = await fp_templates.create_template(tenant_id, template)
+        return {"success": True, "data": new_template}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to create template: {str(e)}")
+
+
+@app.patch("/api/friday-payday/templates/{template_id}")
+async def fp_update_template(
+    template_id: str,
+    updates: Dict[str, Any] = Body(...),
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Update a message template."""
+    try:
+        updated = await fp_templates.update_template(tenant_id, template_id, updates)
+        if not updated:
+            raise HTTPException(404, "Template not found")
+        return {"success": True, "data": updated}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to update template: {str(e)}")
+
+
+@app.delete("/api/friday-payday/templates/{template_id}")
+async def fp_delete_template(
+    template_id: str,
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Delete a message template."""
+    try:
+        success = await fp_templates.delete_template(tenant_id, template_id)
+        if not success:
+            raise HTTPException(404, "Template not found")
+        return {"success": True, "message": "Template deleted"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to delete template: {str(e)}")
+
+
+@app.post("/api/friday-payday/templates/seed")
+async def fp_seed_templates(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Seed default templates for a tenant."""
+    try:
+        count = await fp_templates.seed_default_templates(tenant_id)
+        return {"success": True, "message": f"Created {count} default templates"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to seed templates: {str(e)}")
+
+
+# Friday Summary Email Endpoints
+@app.get("/api/friday-payday/summary/preview")
+async def fp_preview_summary(
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Preview the Friday summary for a tenant."""
+    try:
+        summary = await fp_friday_email.generate_summary(tenant_id)
+
+        # Get tenant info for email generation
+        tenant_result = supabase.table("tenants").select(
+            "name, fp_settings"
+        ).eq("id", tenant_id).single().execute()
+
+        tenant = tenant_result.data or {}
+        fp_settings = tenant.get("fp_settings", {}) or {}
+
+        html = fp_friday_email.generate_email_html(summary, {
+            "name": tenant.get("name", "Your Company"),
+            "brand_color": fp_settings.get("brand_color", "#1E40AF")
+        })
+
+        return {
+            "success": True,
+            "data": {
+                "summary": {
+                    "week_start": summary.week_start.isoformat(),
+                    "week_end": summary.week_end.isoformat(),
+                    "amount_collected": float(summary.amount_collected),
+                    "invoices_paid": summary.invoices_paid,
+                    "vs_last_week_pct": float(summary.vs_last_week_pct),
+                    "outstanding_balance": float(summary.outstanding_balance),
+                    "current_dso": float(summary.current_dso),
+                    "top_payments": summary.top_payments
+                },
+                "html": html
+            }
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to generate summary: {str(e)}")
+
+
+@app.post("/api/friday-payday/summary/send")
+async def fp_send_summary(
+    background_tasks: BackgroundTasks,
+    tenant_id: str = Depends(get_current_tenant_id)
+):
+    """Send the Friday summary email for a tenant."""
+    try:
+        async def send_email():
+            await fp_friday_email.send_summary(tenant_id)
+
+        background_tasks.add_task(send_email)
+
+        return {"success": True, "message": "Friday summary email queued for sending"}
+    except Exception as e:
+        raise HTTPException(500, f"Failed to send summary: {str(e)}")
+
+
+# Payment Portal (public endpoint - no auth required)
+@app.get("/api/friday-payday/portal/{token}")
+async def fp_payment_portal(token: str):
+    """Get invoice details for payment portal (public)."""
+    try:
+        invoice = await fp_sync.get_invoice_by_payment_token(token)
+
+        if not invoice:
+            raise HTTPException(404, "Invoice not found or link expired")
+
+        # Return only necessary fields for payment
+        return {
+            "success": True,
+            "data": {
+                "invoice_number": invoice.get("invoice_number"),
+                "amount": float(invoice.get("amount", 0)),
+                "balance": float(invoice.get("balance", 0)),
+                "due_date": invoice.get("due_date"),
+                "job_address": invoice.get("job_address"),
+                "customer_name": invoice.get("fp_customers", {}).get("display_name"),
+                "company_name": invoice.get("tenants", {}).get("name"),
+                "brand_color": invoice.get("tenants", {}).get("fp_settings", {}).get("brand_color", "#1E40AF"),
+                "logo_url": invoice.get("tenants", {}).get("fp_settings", {}).get("logo_url"),
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Failed to load payment portal: {str(e)}")
+
+
+# Demo data endpoint for Friday Payday
+@app.get("/api/friday-payday/demo")
+async def fp_demo_data():
+    """Get demo data for Friday Payday (no auth required)."""
+    from datetime import date, timedelta
+    from decimal import Decimal
+
+    today = date.today()
+
+    demo_invoices = [
+        {
+            "id": "demo-inv-001",
+            "invoice_number": "INV-2024-001",
+            "customer_name": "Johnson Residence",
+            "amount": 12500,
+            "balance": 12500,
+            "due_date": (today - timedelta(days=15)).isoformat(),
+            "days_overdue": 15,
+            "status": "overdue",
+            "payer_type": "homeowner_direct",
+            "sequence_status": "active",
+            "job_address": "123 Oak Street, Dallas TX"
+        },
+        {
+            "id": "demo-inv-002",
+            "invoice_number": "INV-2024-002",
+            "customer_name": "Smith Insurance Claim",
+            "amount": 18750,
+            "balance": 18750,
+            "due_date": (today - timedelta(days=45)).isoformat(),
+            "days_overdue": 45,
+            "status": "overdue",
+            "payer_type": "insurance_pending",
+            "sequence_status": "active",
+            "job_address": "456 Elm Avenue, Fort Worth TX"
+        },
+        {
+            "id": "demo-inv-003",
+            "invoice_number": "INV-2024-003",
+            "customer_name": "Garcia Roofing",
+            "amount": 8500,
+            "balance": 4250,
+            "due_date": (today - timedelta(days=7)).isoformat(),
+            "days_overdue": 7,
+            "status": "partial",
+            "payer_type": "homeowner_direct",
+            "sequence_status": "active",
+            "job_address": "789 Pine Road, Arlington TX"
+        },
+        {
+            "id": "demo-inv-004",
+            "invoice_number": "INV-2024-004",
+            "customer_name": "Williams Supplement",
+            "amount": 3200,
+            "balance": 3200,
+            "due_date": (today - timedelta(days=30)).isoformat(),
+            "days_overdue": 30,
+            "status": "overdue",
+            "payer_type": "supplement_pending",
+            "sequence_status": "active",
+            "job_address": "321 Maple Lane, Plano TX"
+        },
+        {
+            "id": "demo-inv-005",
+            "invoice_number": "INV-2024-005",
+            "customer_name": "ABC Property Management",
+            "amount": 45000,
+            "balance": 45000,
+            "due_date": (today + timedelta(days=15)).isoformat(),
+            "days_overdue": 0,
+            "status": "sent",
+            "payer_type": "gc_commercial",
+            "sequence_status": "not_started",
+            "job_address": "500 Commerce Blvd, Dallas TX"
+        }
+    ]
+
+    demo_aging = {
+        "as_of_date": today.isoformat(),
+        "buckets": [
+            {"bucket": "current", "amount": 45000, "count": 1, "percentage": 53.25},
+            {"bucket": "1-30", "amount": 16750, "count": 2, "percentage": 19.82},
+            {"bucket": "31-60", "amount": 21950, "count": 2, "percentage": 25.98},
+            {"bucket": "61-90", "amount": 0, "count": 0, "percentage": 0},
+            {"bucket": "90+", "amount": 800, "count": 1, "percentage": 0.95}
+        ],
+        "total_ar": 84500,
+        "total_invoices": 6,
+        "dso": 42
+    }
+
+    demo_summary = {
+        "week_start": (today - timedelta(days=7)).isoformat(),
+        "week_end": today.isoformat(),
+        "amount_collected": 14750,
+        "invoices_paid": 4,
+        "vs_last_week": {"amount": 3200, "percentage": 27.7},
+        "top_payments": [
+            {"amount": 8500, "customer_name": "Thompson Residence", "job_name": "Full Replacement"},
+            {"amount": 3200, "customer_name": "Davis Insurance", "job_name": "Storm Damage Claim"},
+            {"amount": 1800, "customer_name": "Miller Repair", "job_name": "Leak Repair"},
+        ],
+        "outstanding": {"balance": 84500, "invoices": 6},
+        "current_dso": 42
+    }
+
+    return {
+        "success": True,
+        "data": {
+            "invoices": demo_invoices,
+            "aging": demo_aging,
+            "summary": demo_summary
+        },
+        "source": "demo"
+    }
+
+
+# ============================================================
 # RUN SERVER
 # ============================================================
 

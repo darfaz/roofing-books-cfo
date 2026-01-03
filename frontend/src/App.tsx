@@ -5,6 +5,7 @@ import { ValuationDashboard } from './components/ValuationDashboard'
 import { Header } from './components/Header'
 import { DemoGate } from './components/DemoGate'
 import { DemoProvider, useDemoMode } from './context/DemoContext'
+import { PaymentPortal } from './components/FridayPayday/PaymentPortal'
 
 function AppContent() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -14,6 +15,10 @@ function AppContent() {
 
   // Check if we're on the /demo route (handles both /demo and /dashboard/demo)
   const isDemoRoute = window.location.pathname.endsWith('/demo')
+
+  // Check if we're on the payment portal route
+  const paymentMatch = window.location.pathname.match(/\/pay\/([a-zA-Z0-9-]+)$/)
+  const paymentToken = paymentMatch ? paymentMatch[1] : null
 
   // CRITICAL: Sync demo mode with URL - clear demo mode when NOT on demo route
   // This fixes the bug where localStorage persists demo mode after navigating away
@@ -63,6 +68,11 @@ function AppContent() {
         </div>
       </div>
     )
+  }
+
+  // Payment portal route: public page for customer payments
+  if (paymentToken) {
+    return <PaymentPortal token={paymentToken} />
   }
 
   // Demo route: show demo gate or demo dashboard
